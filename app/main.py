@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status, Query
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status, Query, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
@@ -11,6 +11,13 @@ import datetime
 import os
 import httpx
 import logging
+
+# הגדרת logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -34,29 +41,51 @@ async def startup_event():
 
 async def call_webhook(document_id: str):
     """קורא ל-webhook עם ה-ID של המסמך"""
+    logger.info(f"[WEBHOOK] Starting webhook call for document_id: {document_id}")
+    logger.info(f"[WEBHOOK] URL: {WEBHOOK_URL}")
+    logger.info(f"[WEBHOOK] Payload: {{'id': '{document_id}'}}")
+    
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            logger.info(f"[WEBHOOK] Sending POST request to webhook...")
             response = await client.post(
                 WEBHOOK_URL,
                 json={"id": document_id},
                 headers={"Content-Type": "application/json"}
             )
             status_code = response.status_code
-            status_text = response.text[:200] if response.text else None
+            status_text = response.text[:500] if response.text else None
+            
+            logger.info(f"[WEBHOOK] Response status code: {status_code}")
+            logger.info(f"[WEBHOOK] Response headers: {dict(response.headers)}")
+            logger.info(f"[WEBHOOK] Response text (first 500 chars): {status_text}")
+            
             await update_webhook_status(db_client, document_id, status_code, status_text)
-            logging.info(f"Webhook called for {document_id}, status: {status_code}")
+            logger.info(f"[WEBHOOK] Successfully updated webhook_status for {document_id} with status {status_code}")
+            
+    except httpx.TimeoutException as e:
+        error_msg = f"Webhook timeout: {str(e)}"
+        logger.error(f"[WEBHOOK] {error_msg}")
+        await update_webhook_status(db_client, document_id, 0, error_msg[:200])
+    except httpx.RequestError as e:
+        error_msg = f"Webhook request error: {str(e)}"
+        logger.error(f"[WEBHOOK] {error_msg}")
+        await update_webhook_status(db_client, document_id, 0, error_msg[:200])
     except Exception as e:
-        logging.error(f"Webhook error for {document_id}: {e}")
-        await update_webhook_status(db_client, document_id, 0, str(e)[:200])
+        error_msg = f"Webhook unexpected error: {str(e)}"
+        logger.error(f"[WEBHOOK] {error_msg}", exc_info=True)
+        await update_webhook_status(db_client, document_id, 0, error_msg[:200])
 
 @app.post("/upload-cv", response_model=CVUploadResponse)
 async def upload_cv(
+    background_tasks: BackgroundTasks,
     file: Optional[UploadFile] = File(None),
     name: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
     notes: Optional[str] = Form(None)
 ):
-    if not file and not any([name, phone, notes]):
+    if not file and not any([name, phone, email, notes]):
         raise HTTPException(status_code=400, detail="Must provide either PDF file or metadata")
 
     file_metadata = None
@@ -82,6 +111,7 @@ async def upload_cv(
         "known_data": {
             "name": name,
             "phone": phone,
+            "email": email,
             "notes": notes
         },
         "processing": {
@@ -91,9 +121,11 @@ async def upload_cv(
     }
 
     inserted_id = await insert_cv_document(db_client, document)
+    logger.info(f"[UPLOAD] Document saved with ID: {inserted_id}")
     
-    # קריאה ל-webhook אחרי השמירה
-    await call_webhook(inserted_id)
+    # קריאה ל-webhook אחרי השמירה (ב-background כדי לא לחסום את התגובה)
+    background_tasks.add_task(call_webhook, inserted_id)
+    logger.info(f"[UPLOAD] Webhook task added to background for document_id: {inserted_id}")
     
     return {"id": str(inserted_id), "status": "stored"}
 

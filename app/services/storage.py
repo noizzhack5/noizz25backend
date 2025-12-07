@@ -48,6 +48,7 @@ async def search_documents(db, term: str) -> list:
                 {"file_metadata.content_type": {"$regex": term, "$options": "i"}},
                 {"known_data.name": {"$regex": term, "$options": "i"}},
                 {"known_data.phone": {"$regex": term, "$options": "i"}},
+                {"known_data.email": {"$regex": term, "$options": "i"}},
                 {"known_data.notes": {"$regex": term, "$options": "i"}},
                 {"processing.error_message": {"$regex": term, "$options": "i"}},
             ]}
