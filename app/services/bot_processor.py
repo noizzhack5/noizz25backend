@@ -51,18 +51,18 @@ async def process_waiting_for_bot_records(db, trigger_source: str = "unknown") -
         latin_name = known_data.get("latin_name")
         
         # בדוק שיש את כל הנתונים הנדרשים
-        if not phone_number or not latin_name:
-            logger.warning(
-                f"[BOT_PROCESSOR] Skipping record {record_id}: missing phone_number or latin_name. "
-                f"phone_number={phone_number}, latin_name={latin_name}"
-            )
-            results["skipped"] += 1
-            results["details"].append({
-                "id": record_id,
-                "status": "skipped",
-                "reason": "missing phone_number or latin_name"
-            })
-            continue
+        # if not phone_number or not latin_name:
+        #     logger.warning(
+        #         f"[BOT_PROCESSOR] Skipping record {record_id}: missing phone_number or latin_name. "
+        #         f"phone_number={phone_number}, latin_name={latin_name}"
+        #     )
+        #     results["skipped"] += 1
+        #     results["details"].append({
+        #         "id": record_id,
+        #         "status": "skipped",
+        #         "reason": "missing phone_number or latin_name"
+        #     })
+        #     continue
         
         # בצע קריאה ל-webhook
         try:
@@ -149,16 +149,61 @@ async def call_bot_webhook(db, record_id: str, phone_number: str, latin_name: st
             # עדכן את סטטוס ה-webhook
             await update_webhook_status(db, record_id, status_code, status_text)
             
-            # אם הקריאה הצליחה (status code 2xx), החזר True
-            # הסטטוס יעודכן בסוף העיבוד של כל הרשומות
-            if 200 <= status_code < 300:
-                return True
-            else:
-                logger.warning(
-                    f"[BOT_WEBHOOK] Webhook returned non-success status code {status_code} "
-                    f"for record {record_id}"
+            # נסה לפרסר את ה-response כ-JSON ולבדוק את השדה success
+            try:
+                response_json = response.json()
+                logger.info(
+                    f"[BOT_WEBHOOK] Parsed response JSON for record {record_id}: {response_json}"
                 )
-                return False
+                success_value = response_json.get("success", False)
+                
+                # המר string "true"/"false" לבוליאני
+                if isinstance(success_value, str):
+                    success_value_lower = success_value.lower().strip()
+                    if success_value_lower == "true":
+                        success_value = True
+                        logger.info(
+                            f"[BOT_WEBHOOK] Converted success string 'true' to boolean True for record {record_id}"
+                        )
+                    elif success_value_lower == "false":
+                        success_value = False
+                        logger.info(
+                            f"[BOT_WEBHOOK] Converted success string 'false' to boolean False for record {record_id}"
+                        )
+                    else:
+                        # אם הערך הוא string אבל לא "true" או "false", נשתמש ב-status code כגיבוי
+                        logger.warning(
+                            f"[BOT_WEBHOOK] Webhook response success field is string with unexpected value '{success_value}' for record {record_id}, "
+                            f"using status code as fallback"
+                        )
+                        return 200 <= status_code < 300
+                
+                if isinstance(success_value, bool):
+                    if success_value:
+                        logger.info(
+                            f"[BOT_WEBHOOK] Webhook returned success=True for record {record_id}"
+                        )
+                        return True
+                    else:
+                        logger.warning(
+                            f"[BOT_WEBHOOK] Webhook returned success=False for record {record_id}"
+                        )
+                        return False
+                else:
+                    # אם success לא boolean ולא string, נשתמש ב-status code כגיבוי
+                    logger.warning(
+                        f"[BOT_WEBHOOK] Webhook response success field is not boolean or string for record {record_id} "
+                        f"(type: {type(success_value).__name__}, value: {success_value}), "
+                        f"using status code as fallback"
+                    )
+                    return 200 <= status_code < 300
+            except (ValueError, KeyError) as e:
+                # אם לא ניתן לפרסר JSON או אין שדה success, נשתמש ב-status code כגיבוי
+                logger.warning(
+                    f"[BOT_WEBHOOK] Could not parse response JSON or find 'success' field for record {record_id}: {str(e)}. "
+                    f"Using status code as fallback"
+                )
+                return 200 <= status_code < 300
                 
     except httpx.TimeoutException as e:
         error_msg = f"Webhook timeout: {str(e)}"
