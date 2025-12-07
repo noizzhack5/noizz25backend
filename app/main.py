@@ -3,10 +3,10 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
-from app.models import CVDocumentInDB, CVUploadResponse
+from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, update_webhook_status
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, update_webhook_status, update_document_partial
 import datetime
 import os
 import httpx
@@ -110,7 +110,7 @@ async def upload_cv(
         "extracted_text": extracted_text,
         "known_data": {
             "name": name,
-            "phone": phone,
+            "phone_number": phone,  # שמירה כ-phone_number במקום phone
             "email": email,
             "notes": notes
         },
@@ -150,6 +150,31 @@ async def delete_cv_by_id(id: str):
 @app.get("/cv/search")
 async def search_cv(query: str = Query(..., min_length=1)):
     return await search_documents(db_client, query)
+
+@app.patch("/cv/{id}")
+async def update_cv(id: str, update_data: CVUpdateRequest):
+    """
+    מעדכן מסמך - רק שדות שלא קיימים או ריקים
+    מקבל JSON עם שדות נוספים על המועמד
+    """
+    # בדוק שהמסמך קיים
+    doc = await get_document_by_id(db_client, id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # המר את ה-Pydantic model ל-dict (רק שדות שלא None)
+    update_dict = update_data.model_dump(exclude_none=True)
+    
+    # עדכן את המסמך
+    updated = await update_document_partial(db_client, id, update_dict)
+    
+    if updated:
+        logger.info(f"[UPDATE] Document {id} updated successfully")
+        return {"status": "updated", "id": id}
+    else:
+        # אם לא היה מה לעדכן (כל השדות כבר קיימים)
+        logger.info(f"[UPDATE] Document {id} - no new fields to update")
+        return {"status": "no_changes", "id": id, "message": "All fields already exist or are empty"}
 
 # אפשרות להרצה ישירה עבור Render, Heroku או לוקאלי:
 if __name__ == "__main__":

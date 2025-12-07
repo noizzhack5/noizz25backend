@@ -38,6 +38,71 @@ async def update_webhook_status(db, id: str, status_code: int, status_text: str 
     )
     return res.modified_count > 0
 
+async def update_document_partial(db, id: str, update_data: dict) -> bool:
+    """מעדכן מסמך - רק שדות שלא קיימים או ריקים"""
+    # קבל את המסמך הנוכחי
+    doc = await db[COLLECTION_NAME].find_one({"_id": ObjectId(id), "is_deleted": {"$ne": True}})
+    if not doc:
+        return False
+    
+    # בנה את ה-update - רק שדות שלא קיימים או ריקים
+    set_updates = {}
+    
+    # שדות ב-known_data
+    known_data_updates = {}
+    if "known_data" not in doc:
+        doc["known_data"] = {}
+    
+    # כל השדות הנוספים יישמרו תחת known_data
+    # השדות המשותפים (phone_number, email) - מעדכן רק אם לא קיימים או ריקים
+    # שאר השדות - מעדכן רק אם לא קיימים או ריקים
+    
+    all_fields = [
+        "latin_name", "hebrew_name", "phone_number", "email",
+        "age", "nationality", "can_travel_europe", 
+        "can_visit_israel", "lives_in_europe", "native_israeli",
+        "english_level", "remembers_job_application", "skills_summary"
+    ]
+    
+    for field in all_fields:
+        if field in update_data:
+            # עבור שדות ריקים - עדכן רק אם לא קיים
+            # עבור שדות עם ערך - עדכן רק אם לא קיים או ריק
+            value = update_data[field]
+            current_value = doc.get("known_data", {}).get(field)
+            
+            # אם הערך ריק (""), עדכן רק אם השדה לא קיים
+            if value == "":
+                if current_value is None:
+                    known_data_updates[field] = value
+            # אם יש ערך, עדכן רק אם לא קיים או ריק
+            elif value:
+                if not current_value or current_value == "":
+                    known_data_updates[field] = value
+    
+    # טיפול מיוחד: phone -> phone_number
+    if "phone" in update_data and update_data["phone"]:
+        current_phone_number = doc.get("known_data", {}).get("phone_number")
+        if not current_phone_number or current_phone_number == "":
+            known_data_updates["phone_number"] = update_data["phone"]
+    
+    # אם אין מה לעדכן, החזר True (כבר קיים)
+    if not set_updates and not known_data_updates:
+        return True
+    
+    # עדכן את המסמך
+    # אם יש known_data_updates, צריך לעשות merge עם known_data הקיים
+    if known_data_updates:
+        existing_known_data = doc.get("known_data", {})
+        existing_known_data.update(known_data_updates)
+        set_updates["known_data"] = existing_known_data
+    
+    res = await db[COLLECTION_NAME].update_one(
+        {"_id": ObjectId(id)},
+        {"$set": set_updates}
+    )
+    return res.modified_count > 0
+
 async def search_documents(db, term: str) -> list:
     q = {
         "$and": [
@@ -47,7 +112,7 @@ async def search_documents(db, term: str) -> list:
                 {"file_metadata.filename": {"$regex": term, "$options": "i"}},
                 {"file_metadata.content_type": {"$regex": term, "$options": "i"}},
                 {"known_data.name": {"$regex": term, "$options": "i"}},
-                {"known_data.phone": {"$regex": term, "$options": "i"}},
+                {"known_data.phone_number": {"$regex": term, "$options": "i"}},
                 {"known_data.email": {"$regex": term, "$options": "i"}},
                 {"known_data.notes": {"$regex": term, "$options": "i"}},
                 {"processing.error_message": {"$regex": term, "$options": "i"}},
