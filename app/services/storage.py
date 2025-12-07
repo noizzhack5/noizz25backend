@@ -151,3 +151,16 @@ async def search_documents(db, term: str) -> list:
         doc.pop("_id", None)
         docs.append(doc)
     return docs
+
+async def get_documents_by_status(db, status: str) -> List[dict]:
+    """מחזיר את כל המסמכים עם סטטוס מסוים"""
+    query = {
+        "status": status,
+        "is_deleted": {"$ne": True}
+    }
+    docs = []
+    async for doc in db[COLLECTION_NAME].find(query):
+        doc["id"] = str(doc["_id"])
+        doc.pop("_id", None)
+        docs.append(doc)
+    return docs
