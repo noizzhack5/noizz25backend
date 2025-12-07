@@ -130,13 +130,13 @@ async def upload_cv(
     return {"id": str(inserted_id), "status": "stored"}
 
 @app.get("/cv")
-async def get_all(include_deleted: Optional[bool] = Query(None, description="True - רק מחוקים, False/None - רק לא מחוקים")):
+async def get_all(deleted: Optional[bool] = Query(None, description="True - רק מחוקים, False/None - רק לא מחוקים")):
     """
     מחזיר את כל המסמכים
-    - include_deleted=None או False: רק מסמכים שלא מחוקים (ברירת מחדל)
-    - include_deleted=True: רק מסמכים מחוקים
+    - deleted=None או False: רק מסמכים שלא מחוקים (ברירת מחדל)
+    - deleted=True: רק מסמכים מחוקים
     """
-    return await get_all_documents(db_client, include_deleted)
+    return await get_all_documents(db_client, deleted)
 
 @app.get("/cv/{id}")
 async def get_cv_by_id(id: str):
