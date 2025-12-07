@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+motor
+pdfminer.six
+python-multipart
+pydantic
+tika

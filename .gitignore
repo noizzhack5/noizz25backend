@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+venv/
+ENV/
+.env
+
+# Database/Artifact files
+*.db
+*.sqlite3
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Documents
+*.pdf
+*.docx
+*.xlsx
+
+# VSCode/meta
+.vscode/
+*.code-workspace
+
+# IDEA
+.idea/
