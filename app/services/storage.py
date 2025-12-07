@@ -8,9 +8,25 @@ async def insert_cv_document(db, doc: dict) -> str:
     res = await db[COLLECTION_NAME].insert_one(doc)
     return str(res.inserted_id)
 
-async def get_all_documents(db) -> List[dict]:
+async def get_all_documents(db, include_deleted: Optional[bool] = None) -> List[dict]:
+    """
+    מחזיר את כל המסמכים
+    include_deleted: None/False - רק לא מחוקים (ברירת מחדל)
+                   True - רק מחוקים
+    """
+    # בנה את ה-query בהתאם לפרמטר
+    if include_deleted is True:
+        # רק מחוקים
+        query = {"is_deleted": True}
+    elif include_deleted is False or include_deleted is None:
+        # רק לא מחוקים (ברירת מחדל)
+        query = {"is_deleted": {"$ne": True}}
+    else:
+        # אם משהו לא צפוי, ברירת מחדל - רק לא מחוקים
+        query = {"is_deleted": {"$ne": True}}
+    
     docs = []
-    async for doc in db[COLLECTION_NAME].find({"is_deleted": {"$ne": True}}):
+    async for doc in db[COLLECTION_NAME].find(query):
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
         docs.append(doc)
