@@ -4,4 +4,4 @@ motor
 pdfminer.six
 python-multipart
 pydantic
-tika
+httpx

@@ -27,6 +27,17 @@ async def delete_document_by_id(db, id: str) -> bool:
     res = await db[COLLECTION_NAME].update_one({"_id": ObjectId(id)}, {"$set": {"is_deleted": True}})
     return res.modified_count > 0
 
+async def update_webhook_status(db, id: str, status_code: int, status_text: str = None) -> bool:
+    """מעדכן את סטטוס ה-webhook במסמך"""
+    update_data = {"webhook_status": {"status_code": status_code}}
+    if status_text:
+        update_data["webhook_status"]["status_text"] = status_text
+    res = await db[COLLECTION_NAME].update_one(
+        {"_id": ObjectId(id)},
+        {"$set": update_data}
+    )
+    return res.modified_count > 0
+
 async def search_documents(db, term: str) -> list:
     q = {
         "$and": [
