@@ -1,11 +1,11 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status, Query
 from fastapi.responses import JSONResponse
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.models import CVDocumentInDB, CVUploadResponse
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents
 import datetime
 import os
 
@@ -79,6 +79,10 @@ async def delete_cv_by_id(id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"status": "deleted"}
+
+@app.get("/cv/search")
+async def search_cv(query: str = Query(..., min_length=1)):
+    return await search_documents(db_client, query)
 
 # אפשרות להרצה ישירה עבור Render, Heroku או לוקאלי:
 if __name__ == "__main__":
