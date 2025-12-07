@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, update_webhook_status, update_document_partial
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, update_webhook_status, update_document_partial, update_document_status
 import datetime
 import os
 import httpx
@@ -62,6 +62,11 @@ async def call_webhook(document_id: str):
             
             await update_webhook_status(db_client, document_id, status_code, status_text)
             logger.info(f"[WEBHOOK] Successfully updated webhook_status for {document_id} with status {status_code}")
+            
+            # אם הקריאה הצליחה (status code 2xx), עדכן סטטוס ל-"extracting"
+            if 200 <= status_code < 300:
+                await update_document_status(db_client, document_id, "extracting")
+                logger.info(f"[WEBHOOK] Updated document {document_id} status to 'extracting'")
             
     except httpx.TimeoutException as e:
         error_msg = f"Webhook timeout: {str(e)}"
@@ -174,7 +179,9 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
     updated = await update_document_partial(db_client, id, update_dict)
     
     if updated:
-        logger.info(f"[UPDATE] Document {id} updated successfully")
+        # עדכן סטטוס ל-"waiting_for_bot" אחרי עדכון מוצלח
+        await update_document_status(db_client, id, "waiting_for_bot")
+        logger.info(f"[UPDATE] Document {id} updated successfully, status set to 'waiting_for_bot'")
         return {"status": "updated", "id": id}
     else:
         # אם לא היה מה לעדכן (כל השדות כבר קיימים)

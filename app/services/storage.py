@@ -5,8 +5,17 @@ COLLECTION_NAME = "basicHR"
 
 async def insert_cv_document(db, doc: dict) -> str:
     doc["is_deleted"] = False
+    doc["status"] = "received"  # סטטוס ראשוני: נקלט
     res = await db[COLLECTION_NAME].insert_one(doc)
     return str(res.inserted_id)
+
+async def update_document_status(db, id: str, status: str) -> bool:
+    """מעדכן את סטטוס המסמך"""
+    res = await db[COLLECTION_NAME].update_one(
+        {"_id": ObjectId(id)},
+        {"$set": {"status": status}}
+    )
+    return res.modified_count > 0
 
 async def get_all_documents(db, deleted: Optional[bool] = None) -> List[dict]:
     """
