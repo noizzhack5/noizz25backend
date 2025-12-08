@@ -10,7 +10,12 @@ class FileMetadataModel(BaseModel):
 class KnownDataModel(BaseModel):
     name: Optional[str]
     phone: Optional[str]
+    email: Optional[str]
+    campaign: Optional[str]
     notes: Optional[str]
+    job_type: Optional[str] = None
+    match_score: Optional[str] = None
+    class_explain: Optional[str] = None
 
 class ProcessingModel(BaseModel):
     parse_success: bool
@@ -34,6 +39,7 @@ class CVUpdateRequest(BaseModel):
     phone_number: Optional[str] = Field(default=None, description="מספר טלפון")
     phone: Optional[str] = Field(default=None, description="מספר טלפון (יומר ל-phone_number)")
     email: Optional[str] = Field(default=None, description="כתובת אימייל")
+    campaign: Optional[str] = Field(default=None, description="קמפיין")
     age: Optional[str] = Field(default=None, description="גיל")
     nationality: Optional[str] = Field(default=None, description="לאום")
     can_travel_europe: Optional[str] = Field(default=None, description="יכול לנסוע לאירופה")
@@ -43,6 +49,9 @@ class CVUpdateRequest(BaseModel):
     english_level: Optional[str] = Field(default=None, description="רמת אנגלית")
     remembers_job_application: Optional[str] = Field(default=None, description="זוכר את בקשת העבודה")
     skills_summary: Optional[str] = Field(default=None, description="סיכום כישורים")
+    job_type: Optional[str] = Field(default=None, description="סוג עבודה")
+    match_score: Optional[str] = Field(default=None, description="ציון התאמה")
+    class_explain: Optional[str] = Field(default=None, description="הסבר קלאסיפיקציה")
     
     class Config:
         json_schema_extra = {
@@ -51,6 +60,7 @@ class CVUpdateRequest(BaseModel):
                 "hebrew_name": "יוחנן דו",
                 "phone_number": "+1234567890",
                 "email": "example@email.com",
+                "campaign": "Summer 2024",
                 "age": "30",
                 "nationality": "Israeli",
                 "can_travel_europe": "yes",

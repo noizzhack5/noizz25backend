@@ -122,9 +122,10 @@ async def upload_cv(
     name: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     email: Optional[str] = Form(None),
+    campaign: Optional[str] = Form(None),
     notes: Optional[str] = Form(None)
 ):
-    if not file and not any([name, phone, email, notes]):
+    if not file and not any([name, phone, email, campaign, notes]):
         raise HTTPException(status_code=400, detail="Must provide either PDF file or metadata")
 
     file_metadata = None
@@ -151,7 +152,11 @@ async def upload_cv(
             "name": name,
             "phone_number": phone,  # שמירה כ-phone_number במקום phone
             "email": email,
-            "notes": notes
+            "campaign": campaign,
+            "notes": notes,
+            "job_type": None,
+            "match_score": None,
+            "class_explain": None
         },
         "processing": {
             "parse_success": parse_success,
@@ -208,6 +213,13 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
     
     # המר את ה-Pydantic model ל-dict (רק שדות שלא None)
     update_dict = update_data.model_dump(exclude_none=True)
+    
+    # הוסף את השדות job_type, match_score, class_explain תמיד (גם אם None)
+    # שדות אלה נשמרים תמיד תחת known_data, גם אם הם NULL
+    always_update_fields = ["job_type", "match_score", "class_explain"]
+    for field in always_update_fields:
+        if hasattr(update_data, field):
+            update_dict[field] = getattr(update_data, field)
     
     # עדכן את המסמך
     updated = await update_document_partial(db_client, id, update_dict)

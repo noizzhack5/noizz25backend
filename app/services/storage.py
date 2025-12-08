@@ -3,6 +3,18 @@ from bson import ObjectId
 
 COLLECTION_NAME = "basicHR"
 
+def normalize_unknown_values(doc: dict) -> dict:
+    """
+    ממיר את כל הערכים "unknown" ב-known_data ל-None
+    מטפל גם ב-"Unknown", "UNKNOWN" וכל וריאציות אחרות
+    """
+    if "known_data" in doc and isinstance(doc["known_data"], dict):
+        for key, value in doc["known_data"].items():
+            # המר "unknown" (בכל וריאציה) ל-None
+            if isinstance(value, str) and value.lower() == "unknown":
+                doc["known_data"][key] = None
+    return doc
+
 async def insert_cv_document(db, doc: dict) -> str:
     doc["is_deleted"] = False
     doc["status"] = "received"  # סטטוס ראשוני: נקלט
@@ -38,14 +50,33 @@ async def get_all_documents(db, deleted: Optional[bool] = None) -> List[dict]:
     async for doc in db[COLLECTION_NAME].find(query):
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
+        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
+        if "known_data" not in doc:
+            doc["known_data"] = {}
+        for field in ["job_type", "match_score", "class_explain"]:
+            if field not in doc["known_data"]:
+                doc["known_data"][field] = None
+        # המר "unknown" ל-None
+        doc = normalize_unknown_values(doc)
         docs.append(doc)
     return docs
 
 async def get_document_by_id(db, id: str) -> Optional[dict]:
-    doc = await db[COLLECTION_NAME].find_one({"_id": ObjectId(id), "is_deleted": {"$ne": True}})
+    """
+    מחזיר מסמך לפי מזהה - ללא בדיקת is_deleted (מחזיר גם מסמכים מחוקים)
+    """
+    doc = await db[COLLECTION_NAME].find_one({"_id": ObjectId(id)})
     if doc:
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
+        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
+        if "known_data" not in doc:
+            doc["known_data"] = {}
+        for field in ["job_type", "match_score", "class_explain"]:
+            if field not in doc["known_data"]:
+                doc["known_data"][field] = None
+        # המר "unknown" ל-None
+        doc = normalize_unknown_values(doc)
     return doc
 
 async def delete_document_by_id(db, id: str) -> bool:
@@ -83,7 +114,7 @@ async def update_document_partial(db, id: str, update_data: dict) -> bool:
     # שאר השדות - מעדכן רק אם לא קיימים או ריקים
     
     all_fields = [
-        "latin_name", "hebrew_name", "phone_number", "email",
+        "latin_name", "hebrew_name", "phone_number", "email", "campaign",
         "age", "nationality", "can_travel_europe", 
         "can_visit_israel", "lives_in_europe", "native_israeli",
         "english_level", "remembers_job_application", "skills_summary"
@@ -110,6 +141,14 @@ async def update_document_partial(db, id: str, update_data: dict) -> bool:
         current_phone_number = doc.get("known_data", {}).get("phone_number")
         if not current_phone_number or current_phone_number == "":
             known_data_updates["phone_number"] = update_data["phone"]
+    
+    # שדות job_type, match_score, class_explain נשמרים תמיד, גם אם הם None/NULL
+    # הם חלק מ-known_data, אבל נשמרים תמיד (לא רק אם לא קיימים)
+    always_update_fields = ["job_type", "match_score", "class_explain"]
+    for field in always_update_fields:
+        if field in update_data:
+            # שמור את הערך גם אם הוא None
+            known_data_updates[field] = update_data[field] if update_data[field] is not None else None
     
     # אם אין מה לעדכן, החזר True (כבר קיים)
     if not set_updates and not known_data_updates:
@@ -139,7 +178,11 @@ async def search_documents(db, term: str) -> list:
                 {"known_data.name": {"$regex": term, "$options": "i"}},
                 {"known_data.phone_number": {"$regex": term, "$options": "i"}},
                 {"known_data.email": {"$regex": term, "$options": "i"}},
+                {"known_data.campaign": {"$regex": term, "$options": "i"}},
                 {"known_data.notes": {"$regex": term, "$options": "i"}},
+                {"known_data.job_type": {"$regex": term, "$options": "i"}},
+                {"known_data.match_score": {"$regex": term, "$options": "i"}},
+                {"known_data.class_explain": {"$regex": term, "$options": "i"}},
                 {"processing.error_message": {"$regex": term, "$options": "i"}},
             ]}
         ]
@@ -149,6 +192,14 @@ async def search_documents(db, term: str) -> list:
     async for doc in cursor:
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
+        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
+        if "known_data" not in doc:
+            doc["known_data"] = {}
+        for field in ["job_type", "match_score", "class_explain"]:
+            if field not in doc["known_data"]:
+                doc["known_data"][field] = None
+        # המר "unknown" ל-None
+        doc = normalize_unknown_values(doc)
         docs.append(doc)
     return docs
 
@@ -162,5 +213,13 @@ async def get_documents_by_status(db, status: str) -> List[dict]:
     async for doc in db[COLLECTION_NAME].find(query):
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
+        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
+        if "known_data" not in doc:
+            doc["known_data"] = {}
+        for field in ["job_type", "match_score", "class_explain"]:
+            if field not in doc["known_data"]:
+                doc["known_data"][field] = None
+        # המר "unknown" ל-None
+        doc = normalize_unknown_values(doc)
         docs.append(doc)
     return docs
