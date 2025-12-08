@@ -5,7 +5,7 @@
     "timezone": "UTC"
   },
   "classification_processor": {
-    "interval_minutes": 5,
+    "interval_seconds": 10,
     "timezone": "UTC"
   }
 }

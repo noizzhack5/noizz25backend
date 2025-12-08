@@ -31,7 +31,7 @@ def load_scheduler_config():
             "timezone": "UTC"
         },
         "classification_processor": {
-            "interval_minutes": 5,
+            "interval_seconds": 10,
             "timezone": "UTC"
         }
     }
@@ -66,14 +66,14 @@ def load_scheduler_config():
         # טען הגדרות classification_processor
         classification_config = config.get("classification_processor", {})
         result["classification_processor"] = {
-            "interval_minutes": classification_config.get("interval_minutes", default_config["classification_processor"]["interval_minutes"]),
+            "interval_seconds": classification_config.get("interval_seconds", default_config["classification_processor"]["interval_seconds"]),
             "timezone": classification_config.get("timezone", default_config["classification_processor"]["timezone"])
         }
         
         # בדיקת תקינות classification_processor
-        if result["classification_processor"]["interval_minutes"] <= 0:
-            logger.warning(f"[CONFIG] Invalid interval_minutes value {result['classification_processor']['interval_minutes']}, using default")
-            result["classification_processor"]["interval_minutes"] = default_config["classification_processor"]["interval_minutes"]
+        if result["classification_processor"]["interval_seconds"] <= 0:
+            logger.warning(f"[CONFIG] Invalid interval_seconds value {result['classification_processor']['interval_seconds']}, using default")
+            result["classification_processor"]["interval_seconds"] = default_config["classification_processor"]["interval_seconds"]
         
         logger.info(f"[CONFIG] Loaded scheduler config: {result}")
         return result
@@ -96,7 +96,7 @@ async def scheduled_bot_processor():
         logger.error(f"[SCHEDULER] Error in scheduled job: {str(e)}", exc_info=True)
 
 async def scheduled_classification_processor():
-    """פונקציה שרצה על ידי ה-scheduler כל X דקות לפי ההגדרות"""
+    """פונקציה שרצה על ידי ה-scheduler כל X שניות לפי ההגדרות"""
     global _db_client
     logger.info("[SCHEDULER] Starting scheduled classification processor job (triggered by interval scheduler)")
     try:
@@ -133,21 +133,21 @@ def setup_scheduler(db_client):
         replace_existing=True
     )
     
-    # הוסף job ל-classification_processor (כל X דקות)
+    # הוסף job ל-classification_processor (כל X שניות)
     classification_config = config.get("classification_processor", {})
-    interval_minutes = classification_config.get("interval_minutes", 5)
+    interval_seconds = classification_config.get("interval_seconds", 10)
     scheduler.add_job(
         scheduled_classification_processor,
-        trigger=IntervalTrigger(minutes=interval_minutes),
+        trigger=IntervalTrigger(seconds=interval_seconds),
         id="classification_processor",
-        name=f"Process {STATUS_WAITING_CLASSIFICATION} records every {interval_minutes} minutes",
+        name=f"Process {STATUS_WAITING_CLASSIFICATION} records every {interval_seconds} seconds",
         replace_existing=True
     )
     
     scheduler.start()
     logger.info(f"[STARTUP] Scheduler started:")
     logger.info(f"[STARTUP]   - Bot processor: daily at {hour:02d}:{minute:02d} {timezone}")
-    logger.info(f"[STARTUP]   - Classification processor: every {interval_minutes} minutes")
+    logger.info(f"[STARTUP]   - Classification processor: every {interval_seconds} seconds")
     return scheduler
 
 def shutdown_scheduler():
