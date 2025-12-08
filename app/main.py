@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_full, update_document_status, update_document_fields_only
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, restore_document_by_id, search_documents, add_status_to_history, update_document_full, update_document_status, update_document_fields_only
 from app.services.bot_processor import process_waiting_for_bot_records
 from app.jobs.classification_processor import process_waiting_classification_records
 from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
@@ -187,10 +187,23 @@ async def get_cv_by_id(id: str):
 
 @app.delete("/cv/{id}")
 async def delete_cv_by_id(id: str):
+    """
+    מוחק מסמך על ידי עדכון is_deleted ל-True
+    """
     deleted = await delete_document_by_id(db_client, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"status": "deleted"}
+
+@app.post("/cv/{id}/restore")
+async def restore_cv_by_id(id: str):
+    """
+    משחזר מסמך שנמחק על ידי עדכון is_deleted ל-False
+    """
+    restored = await restore_document_by_id(db_client, id)
+    if not restored:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"status": "restored", "id": id}
 
 @app.get("/cv/search")
 async def search_cv(query: str = Query(..., min_length=1)):

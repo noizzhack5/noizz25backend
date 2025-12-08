@@ -105,6 +105,11 @@ async def delete_document_by_id(db, id: str) -> bool:
     res = await db[COLLECTION_NAME].update_one({"_id": ObjectId(id)}, {"$set": {"is_deleted": True}})
     return res.modified_count > 0
 
+async def restore_document_by_id(db, id: str) -> bool:
+    """משחזר מסמך שנמחק על ידי עדכון is_deleted ל-False"""
+    res = await db[COLLECTION_NAME].update_one({"_id": ObjectId(id)}, {"$set": {"is_deleted": False}})
+    return res.modified_count > 0
+
 async def add_status_to_history(db, id: str, status: str) -> bool:
     """
     מוסיף סטטוס ל-status_history (ללא עדכון current_status)
