@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Any, List
+from app.constants import DocumentStatus
 
 class FileMetadataModel(BaseModel):
     filename: str
@@ -32,6 +33,10 @@ class CVDocumentInDB(BaseModel):
 class CVUploadResponse(BaseModel):
     id: str
     status: str
+
+class StatusUpdateRequest(BaseModel):
+    """Model לעדכון סטטוס מסמך"""
+    status: DocumentStatus = Field(..., description="הסטטוס החדש לעדכון - חייב להיות אחד מהסטטוסים התקפים")
 
 class CVUpdateRequest(BaseModel):
     """Model לעדכון מסמך CV - כל השדות אופציונליים"""

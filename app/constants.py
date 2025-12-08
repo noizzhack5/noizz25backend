@@ -1,12 +1,26 @@
 """
 קובץ constants לניהול כל הסטטוסים במערכת
 """
+from enum import Enum
 
 # סטטוסים ראשיים
 STATUS_RECEIVED = "received"
 STATUS_EXTRACTING = "extracting"
 STATUS_WAITING_BOT_INTERVIEW = "waiting_bot_interview"
 STATUS_BOT_INTERVIEW = "bot_interview"
+STATUS_READY_FOR_RECRUIT = "ready_for_recruit"
+STATUS_WAITING_CLASSIFICATION = "waiting_classification"
+STATUS_IN_CLASSIFICATION = "in_classification"
+
+class DocumentStatus(str, Enum):
+    """Enum לסטטוסים תקפים של מסמכים"""
+    RECEIVED = STATUS_RECEIVED
+    EXTRACTING = STATUS_EXTRACTING
+    WAITING_BOT_INTERVIEW = STATUS_WAITING_BOT_INTERVIEW
+    BOT_INTERVIEW = STATUS_BOT_INTERVIEW
+    READY_FOR_RECRUIT = STATUS_READY_FOR_RECRUIT
+    WAITING_CLASSIFICATION = STATUS_WAITING_CLASSIFICATION
+    IN_CLASSIFICATION = STATUS_IN_CLASSIFICATION
 
 # סטטוסי processing
 STATUS_PROCESSING_SUCCESS = "processing_success"

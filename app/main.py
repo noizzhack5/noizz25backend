@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
-from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest
+from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_partial, update_document_status
@@ -13,6 +13,7 @@ from app.constants import (
     STATUS_WAITING_BOT_INTERVIEW,
     STATUS_PROCESSING_SUCCESS,
     STATUS_PROCESSING_FAILED,
+    DocumentStatus,
     get_processing_error_status,
     get_webhook_status,
     get_webhook_error_status
@@ -250,6 +251,32 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
         # אם לא היה מה לעדכן (כל השדות כבר קיימים)
         logger.info(f"[UPDATE] Document {id} - no new fields to update")
         return {"status": "no_changes", "id": id, "message": "All fields already exist or are empty"}
+
+@app.patch("/cv/{id}/status")
+async def update_cv_status(id: str, status_data: StatusUpdateRequest):
+    """
+    מעדכן את הסטטוס של מסמך CV
+    
+    - מעדכן את current_status
+    - מוסיף את הסטטוס החדש ל-status_history עם timestamp
+    """
+    # בדוק שהמסמך קיים
+    doc = await get_document_by_id(db_client, id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # עדכן את הסטטוס (status_data.status הוא כבר DocumentStatus enum, נמיר ל-string)
+    status_value = status_data.status.value if isinstance(status_data.status, DocumentStatus) else str(status_data.status)
+    updated = await update_document_status(db_client, id, status_value)
+    if updated:
+        logger.info(f"[STATUS_UPDATE] Document {id} status updated to '{status_value}'")
+        return {
+            "status": "updated",
+            "id": id,
+            "current_status": status_value
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to update document status")
 
 @app.post("/process-waiting-for-bot")
 async def trigger_bot_processor():
