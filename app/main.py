@@ -10,6 +10,7 @@ from app.services.storage import insert_cv_document, get_all_documents, get_docu
 from app.services.bot_processor import process_waiting_for_bot_records
 from app.jobs.classification_processor import process_waiting_classification_records
 from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
+from app.services.config_loader import get_webhook_url
 from app.constants import (
     STATUS_EXTRACTING,
     STATUS_WAITING_BOT_INTERVIEW,
@@ -47,8 +48,6 @@ app.add_middleware(
 
 db_client = None
 
-WEBHOOK_URL = "https://noizzhack5.app.n8n.cloud/webhook/cc359f5c-9c54-454f-bd71-28f3af0aacaf"
-
 @app.on_event("startup")
 async def startup_event():
     global db_client
@@ -63,15 +62,16 @@ async def shutdown_event():
 
 async def call_webhook(document_id: str):
     """קורא ל-webhook עם ה-ID של המסמך"""
+    webhook_url = get_webhook_url("upload_cv")
     logger.info(f"[WEBHOOK] Starting webhook call for document_id: {document_id}")
-    logger.info(f"[WEBHOOK] URL: {WEBHOOK_URL}")
+    logger.info(f"[WEBHOOK] URL: {webhook_url}")
     logger.info(f"[WEBHOOK] Payload: {{'id': '{document_id}'}}")
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             logger.info(f"[WEBHOOK] Sending POST request to webhook...")
             response = await client.post(
-                WEBHOOK_URL,
+                webhook_url,
                 json={"id": document_id},
                 headers={"Content-Type": "application/json"}
             )

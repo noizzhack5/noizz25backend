@@ -5,6 +5,7 @@ import httpx
 import logging
 from typing import Dict
 from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
+from app.services.config_loader import get_webhook_url
 from app.constants import (
     STATUS_WAITING_CLASSIFICATION,
     STATUS_IN_CLASSIFICATION,
@@ -14,7 +15,9 @@ from app.constants import (
 
 logger = logging.getLogger(__name__)
 
-CLASSIFICATION_WEBHOOK_URL = "https://noizzhack5.app.n8n.cloud/webhook/455ab0b0-eaed-47ab-8afc-67cb0ad1c811"
+def get_classification_webhook_url() -> str:
+    """מחזיר את ה-URL של classification webhook מהקונפיגורציה"""
+    return get_webhook_url("classification_processor")
 
 async def process_waiting_classification_records(db) -> Dict[str, any]:
     """
@@ -108,8 +111,9 @@ async def call_classification_webhook(db, record_id: str) -> bool:
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            webhook_url = get_classification_webhook_url()
             response = await client.post(
-                CLASSIFICATION_WEBHOOK_URL,
+                webhook_url,
                 json=payload,
                 headers={"Content-Type": "application/json"}
             )

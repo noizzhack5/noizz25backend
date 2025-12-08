@@ -3,6 +3,7 @@ import httpx
 import logging
 from typing import List, Dict
 from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
+from app.services.config_loader import get_webhook_url
 from app.constants import (
     STATUS_WAITING_BOT_INTERVIEW,
     STATUS_BOT_INTERVIEW,
@@ -12,7 +13,9 @@ from app.constants import (
 
 logger = logging.getLogger(__name__)
 
-BOT_WEBHOOK_URL = "https://noizzhack5.app.n8n.cloud/webhook/7a97c90a-6fe9-49e6-b713-7f77359582a7"
+def get_bot_webhook_url() -> str:
+    """מחזיר את ה-URL של bot webhook מהקונפיגורציה"""
+    return get_webhook_url("bot_processor")
 
 async def process_waiting_for_bot_records(db, trigger_source: str = "unknown") -> Dict[str, any]:
     """
@@ -139,8 +142,9 @@ async def call_bot_webhook(db, record_id: str, phone_number: str, latin_name: st
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            webhook_url = get_bot_webhook_url()
             response = await client.post(
-                BOT_WEBHOOK_URL,
+                webhook_url,
                 json=payload,
                 headers={"Content-Type": "application/json"}
             )

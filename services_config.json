@@ -1,0 +1,9 @@
+{
+  "webhooks": {
+    "base_url": "https://noizzhack5.app.n8n.cloud/webhook",
+    "bot_processor": "7a97c90a-6fe9-49e6-b713-7f77359582a7",
+    "classification_processor": "455ab0b0-eaed-47ab-8afc-67cb0ad1c811",
+    "upload_cv": "cc359f5c-9c54-454f-bd71-28f3af0aacaf"
+  }
+}
+
