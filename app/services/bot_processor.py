@@ -1,15 +1,18 @@
-"""שירות לעיבוד רשומות עם סטטוס waiting_for_bot"""
-import httpx
+"""
+Service for processing records with waiting_for_bot status
+Uses webhook client utility for making HTTP requests
+"""
 import logging
-from typing import List, Dict
+from typing import Dict
 from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
 from app.services.config_loader import get_webhook_url
-from app.constants import (
+from app.core.constants import (
     STATUS_WAITING_BOT_INTERVIEW,
     STATUS_BOT_INTERVIEW,
     get_webhook_status,
     get_webhook_error_status
 )
+from app.utils.webhook_client import webhook_client
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +122,7 @@ async def process_waiting_for_bot_records(db, trigger_source: str = "unknown") -
 async def call_bot_webhook(db, record_id: str, phone_number: str, latin_name: str) -> bool:
     """
     קורא ל-webhook עם הנתונים של הרשומה
+    משתמש ב-webhook_client utility לטיפול בקריאות HTTP
     
     Args:
         db: מסד הנתונים
@@ -129,106 +133,27 @@ async def call_bot_webhook(db, record_id: str, phone_number: str, latin_name: st
     Returns:
         True אם הקריאה הצליחה, False אחרת
     """
-    logger.info(
-        f"[BOT_WEBHOOK] Calling webhook for record {record_id}. "
-        f"phone_number={phone_number}, latin_name={latin_name}"
-    )
-    
+    webhook_url = get_bot_webhook_url()
     payload = {
         "id": record_id,
         "phone_number": phone_number,
         "latin_name": latin_name
     }
     
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            webhook_url = get_bot_webhook_url()
-            response = await client.post(
-                webhook_url,
-                json=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            status_code = response.status_code
-            status_text = response.text[:500] if response.text else None
-            
-            logger.info(
-                f"[BOT_WEBHOOK] Response for record {record_id}: "
-                f"status_code={status_code}, response_text={status_text}"
-            )
-            
-            # הוסף סטטוס webhook ל-history
-            webhook_status = get_webhook_status(status_code, status_text)
-            await add_status_to_history(db, record_id, webhook_status)
-            
-            # נסה לפרסר את ה-response כ-JSON ולבדוק את השדה success
-            try:
-                response_json = response.json()
-                logger.info(
-                    f"[BOT_WEBHOOK] Parsed response JSON for record {record_id}: {response_json}"
-                )
-                success_value = response_json.get("success", False)
-                
-                # המר string "true"/"false" לבוליאני
-                if isinstance(success_value, str):
-                    success_value_lower = success_value.lower().strip()
-                    if success_value_lower == "true":
-                        success_value = True
-                        logger.info(
-                            f"[BOT_WEBHOOK] Converted success string 'true' to boolean True for record {record_id}"
-                        )
-                    elif success_value_lower == "false":
-                        success_value = False
-                        logger.info(
-                            f"[BOT_WEBHOOK] Converted success string 'false' to boolean False for record {record_id}"
-                        )
-                    else:
-                        # אם הערך הוא string אבל לא "true" או "false", נשתמש ב-status code כגיבוי
-                        logger.warning(
-                            f"[BOT_WEBHOOK] Webhook response success field is string with unexpected value '{success_value}' for record {record_id}, "
-                            f"using status code as fallback"
-                        )
-                        return 200 <= status_code < 300
-                
-                if isinstance(success_value, bool):
-                    if success_value:
-                        logger.info(
-                            f"[BOT_WEBHOOK] Webhook returned success=True for record {record_id}"
-                        )
-                        return True
-                    else:
-                        logger.warning(
-                            f"[BOT_WEBHOOK] Webhook returned success=False for record {record_id}"
-                        )
-                        return False
-                else:
-                    # אם success לא boolean ולא string, נשתמש ב-status code כגיבוי
-                    logger.warning(
-                        f"[BOT_WEBHOOK] Webhook response success field is not boolean or string for record {record_id} "
-                        f"(type: {type(success_value).__name__}, value: {success_value}), "
-                        f"using status code as fallback"
-                    )
-                    return 200 <= status_code < 300
-            except (ValueError, KeyError) as e:
-                # אם לא ניתן לפרסר JSON או אין שדה success, נשתמש ב-status code כגיבוי
-                logger.warning(
-                    f"[BOT_WEBHOOK] Could not parse response JSON or find 'success' field for record {record_id}: {str(e)}. "
-                    f"Using status code as fallback"
-                )
-                return 200 <= status_code < 300
-                
-    except httpx.TimeoutException as e:
-        error_msg = f"Webhook timeout: {str(e)}"
-        logger.error(f"[BOT_WEBHOOK] {error_msg} for record {record_id}")
-        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
-        return False
-    except httpx.RequestError as e:
-        error_msg = f"Webhook request error: {str(e)}"
-        logger.error(f"[BOT_WEBHOOK] {error_msg} for record {record_id}")
-        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
-        return False
-    except Exception as e:
-        error_msg = f"Webhook unexpected error: {str(e)}"
-        logger.error(f"[BOT_WEBHOOK] {error_msg} for record {record_id}", exc_info=True)
-        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
-        return False
+    # Use webhook client with success field checking
+    success, status_code, response_text = await webhook_client.call_webhook_with_success_field(
+        url=webhook_url,
+        payload=payload,
+        webhook_name="bot_webhook"
+    )
+    
+    # Add webhook status to history
+    if status_code > 0:
+        webhook_status = get_webhook_status(status_code, response_text)
+    else:
+        webhook_status = get_webhook_error_status(response_text or "Unknown error")
+    
+    await add_status_to_history(db, record_id, webhook_status)
+    
+    return success
 

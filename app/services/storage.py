@@ -1,21 +1,25 @@
+"""
+Storage service for CV documents
+This module provides database operations for CV documents
+Maintains backward compatibility while using new utilities
+"""
 from typing import Any, List, Optional
 from bson import ObjectId
 import datetime
-from app.constants import STATUS_SUBMITTED
+from app.core.constants import STATUS_SUBMITTED
+from app.core.config import COLLECTION_NAME
+from app.utils.data_normalization import normalize_document
 
-COLLECTION_NAME = "basicHR"
-
+# Backward compatibility: keep normalize_unknown_values for existing code
 def normalize_unknown_values(doc: dict) -> dict:
     """
     ממיר את כל הערכים "unknown" ב-known_data ל-None
     מטפל גם ב-"Unknown", "UNKNOWN" וכל וריאציות אחרות
+    
+    Deprecated: Use normalize_document from app.utils.data_normalization instead
     """
-    if "known_data" in doc and isinstance(doc["known_data"], dict):
-        for key, value in doc["known_data"].items():
-            # המר "unknown" (בכל וריאציה) ל-None
-            if isinstance(value, str) and value.lower() == "unknown":
-                doc["known_data"][key] = None
-    return doc
+    from app.utils.data_normalization import normalize_unknown_values as _normalize
+    return _normalize(doc)
 
 async def insert_cv_document(db, doc: dict) -> str:
     doc["is_deleted"] = False
@@ -72,14 +76,8 @@ async def get_all_documents(db, deleted: Optional[bool] = None) -> List[dict]:
     async for doc in db[COLLECTION_NAME].find(query):
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
-        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
-        if "known_data" not in doc:
-            doc["known_data"] = {}
-        for field in ["job_type", "match_score", "class_explain"]:
-            if field not in doc["known_data"]:
-                doc["known_data"][field] = None
-        # המר "unknown" ל-None
-        doc = normalize_unknown_values(doc)
+        # Use normalize_document utility for consistent normalization
+        doc = normalize_document(doc)
         docs.append(doc)
     return docs
 
@@ -91,14 +89,8 @@ async def get_document_by_id(db, id: str) -> Optional[dict]:
     if doc:
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
-        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
-        if "known_data" not in doc:
-            doc["known_data"] = {}
-        for field in ["job_type", "match_score", "class_explain"]:
-            if field not in doc["known_data"]:
-                doc["known_data"][field] = None
-        # המר "unknown" ל-None
-        doc = normalize_unknown_values(doc)
+        # Use normalize_document utility for consistent normalization
+        doc = normalize_document(doc)
     return doc
 
 async def delete_document_by_id(db, id: str) -> bool:
@@ -374,14 +366,8 @@ async def search_documents(db, term: str) -> list:
     async for doc in cursor:
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
-        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
-        if "known_data" not in doc:
-            doc["known_data"] = {}
-        for field in ["job_type", "match_score", "class_explain"]:
-            if field not in doc["known_data"]:
-                doc["known_data"][field] = None
-        # המר "unknown" ל-None
-        doc = normalize_unknown_values(doc)
+        # Use normalize_document utility for consistent normalization
+        doc = normalize_document(doc)
         docs.append(doc)
     return docs
 
@@ -395,13 +381,7 @@ async def get_documents_by_status(db, status: str) -> List[dict]:
     async for doc in db[COLLECTION_NAME].find(query):
         doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
-        # וודא שהשדות job_type, match_score, class_explain קיימים תחת known_data (עם None אם לא קיימים)
-        if "known_data" not in doc:
-            doc["known_data"] = {}
-        for field in ["job_type", "match_score", "class_explain"]:
-            if field not in doc["known_data"]:
-                doc["known_data"][field] = None
-        # המר "unknown" ל-None
-        doc = normalize_unknown_values(doc)
+        # Use normalize_document utility for consistent normalization
+        doc = normalize_document(doc)
         docs.append(doc)
     return docs

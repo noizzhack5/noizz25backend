@@ -1,17 +1,18 @@
 """
-שירות לעיבוד רשומות עם סטטוס waiting_classification
+Service for processing records with waiting_classification status
+Uses webhook client utility for making HTTP requests
 """
-import httpx
 import logging
 from typing import Dict
 from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
 from app.services.config_loader import get_webhook_url
-from app.constants import (
+from app.core.constants import (
     STATUS_WAITING_CLASSIFICATION,
     STATUS_IN_CLASSIFICATION,
     get_webhook_status,
     get_webhook_error_status
 )
+from app.utils.webhook_client import webhook_client
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ async def process_waiting_classification_records(db) -> Dict[str, any]:
 async def call_classification_webhook(db, record_id: str) -> bool:
     """
     קורא ל-webhook עם ה-ID של הרשומה
+    משתמש ב-webhook_client utility לטיפול בקריאות HTTP
     
     Args:
         db: מסד הנתונים
@@ -103,53 +105,25 @@ async def call_classification_webhook(db, record_id: str) -> bool:
     Returns:
         True אם הקריאה הצליחה, False אחרת
     """
-    logger.info(f"[CLASSIFICATION_WEBHOOK] Calling webhook for record {record_id}")
-    
+    webhook_url = get_classification_webhook_url()
     payload = {
         "id": record_id
     }
     
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            webhook_url = get_classification_webhook_url()
-            response = await client.post(
-                webhook_url,
-                json=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            status_code = response.status_code
-            status_text = response.text[:500] if response.text else None
-            
-            logger.info(
-                f"[CLASSIFICATION_WEBHOOK] Response for record {record_id}: "
-                f"status_code={status_code}, response_text={status_text}"
-            )
-            
-            # הוסף סטטוס webhook ל-history
-            webhook_status = get_webhook_status(status_code, status_text)
-            await add_status_to_history(db, record_id, webhook_status)
-            
-            # אם הקריאה הצליחה (status code 2xx), החזר True
-            if 200 <= status_code < 300:
-                logger.info(f"[CLASSIFICATION_WEBHOOK] Webhook call successful for record {record_id}")
-                return True
-            else:
-                logger.warning(f"[CLASSIFICATION_WEBHOOK] Webhook call failed for record {record_id} with status code {status_code}")
-                return False
-                
-    except httpx.TimeoutException as e:
-        error_msg = f"Webhook timeout: {str(e)}"
-        logger.error(f"[CLASSIFICATION_WEBHOOK] {error_msg} for record {record_id}")
-        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
-        return False
-    except httpx.RequestError as e:
-        error_msg = f"Webhook request error: {str(e)}"
-        logger.error(f"[CLASSIFICATION_WEBHOOK] {error_msg} for record {record_id}")
-        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
-        return False
-    except Exception as e:
-        error_msg = f"Webhook unexpected error: {str(e)}"
-        logger.error(f"[CLASSIFICATION_WEBHOOK] {error_msg} for record {record_id}", exc_info=True)
-        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
-        return False
+    # Use webhook client (standard HTTP status code check)
+    success, status_code, response_text = await webhook_client.call_webhook(
+        url=webhook_url,
+        payload=payload,
+        webhook_name="classification_webhook"
+    )
+    
+    # Add webhook status to history
+    if status_code > 0:
+        webhook_status = get_webhook_status(status_code, response_text)
+    else:
+        webhook_status = get_webhook_error_status(response_text or "Unknown error")
+    
+    await add_status_to_history(db, record_id, webhook_status)
+    
+    return success
 

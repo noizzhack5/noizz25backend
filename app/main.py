@@ -11,7 +11,7 @@ from app.services.bot_processor import process_waiting_for_bot_records
 from app.jobs.classification_processor import process_waiting_classification_records
 from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
 from app.services.config_loader import get_webhook_url
-from app.constants import (
+from app.core.constants import (
     STATUS_EXTRACTING,
     STATUS_WAITING_BOT_INTERVIEW,
     STATUS_IN_CLASSIFICATION,
@@ -21,11 +21,19 @@ from app.constants import (
     DocumentStatus,
     get_processing_error_status,
     get_webhook_status,
-    get_webhook_error_status
+    get_webhook_error_status,
+    get_status_by_id,
+    STATUS_ID_MAP
 )
+from app.core.config import (
+    CORS_ALLOW_ORIGINS,
+    CORS_ALLOW_CREDENTIALS,
+    CORS_ALLOW_METHODS,
+    CORS_ALLOW_HEADERS,
+    get_port
+)
+from app.core.exceptions import DocumentNotFoundError, InvalidStatusError, ValidationError
 import datetime
-import os
-import httpx
 import logging
 
 # הגדרת logging
@@ -37,13 +45,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# הוסף CORS middleware
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # מאפשר מכל מקור - לפרודקשן כדאי להגביל ל-domains ספציפיים
-    allow_credentials=True,
-    allow_methods=["*"],  # מאפשר כל ה-HTTP methods
-    allow_headers=["*"],  # מאפשר כל ה-headers
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
+    allow_methods=CORS_ALLOW_METHODS,
+    allow_headers=CORS_ALLOW_HEADERS,
 )
 
 db_client = None
@@ -61,49 +69,34 @@ async def shutdown_event():
     shutdown_scheduler()
 
 async def call_webhook(document_id: str):
-    """קורא ל-webhook עם ה-ID של המסמך"""
-    webhook_url = get_webhook_url("upload_cv")
-    logger.info(f"[WEBHOOK] Starting webhook call for document_id: {document_id}")
-    logger.info(f"[WEBHOOK] URL: {webhook_url}")
-    logger.info(f"[WEBHOOK] Payload: {{'id': '{document_id}'}}")
+    """
+    Call webhook with document ID
+    Uses webhook_client utility for making HTTP requests
+    """
+    from app.utils.webhook_client import webhook_client
     
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            logger.info(f"[WEBHOOK] Sending POST request to webhook...")
-            response = await client.post(
-                webhook_url,
-                json={"id": document_id},
-                headers={"Content-Type": "application/json"}
-            )
-            status_code = response.status_code
-            status_text = response.text[:500] if response.text else None
-            
-            logger.info(f"[WEBHOOK] Response status code: {status_code}")
-            logger.info(f"[WEBHOOK] Response headers: {dict(response.headers)}")
-            logger.info(f"[WEBHOOK] Response text (first 500 chars): {status_text}")
-            
-            # הוסף סטטוס webhook ל-history
-            webhook_status = get_webhook_status(status_code, status_text)
-            await add_status_to_history(db_client, document_id, webhook_status)
-            logger.info(f"[WEBHOOK] Added webhook_status to history for {document_id} with status {status_code}")
-            
-            # אם הקריאה הצליחה (status code 2xx), עדכן סטטוס ל-"extracting"
-            if 200 <= status_code < 300:
-                await update_document_status(db_client, document_id, STATUS_EXTRACTING)
-                logger.info(f"[WEBHOOK] Updated document {document_id} status to '{STATUS_EXTRACTING}'")
-            
-    except httpx.TimeoutException as e:
-        error_msg = f"Webhook timeout: {str(e)}"
-        logger.error(f"[WEBHOOK] {error_msg}")
-        await add_status_to_history(db_client, document_id, get_webhook_error_status(error_msg))
-    except httpx.RequestError as e:
-        error_msg = f"Webhook request error: {str(e)}"
-        logger.error(f"[WEBHOOK] {error_msg}")
-        await add_status_to_history(db_client, document_id, get_webhook_error_status(error_msg))
-    except Exception as e:
-        error_msg = f"Webhook unexpected error: {str(e)}"
-        logger.error(f"[WEBHOOK] {error_msg}", exc_info=True)
-        await add_status_to_history(db_client, document_id, get_webhook_error_status(error_msg))
+    webhook_url = get_webhook_url("upload_cv")
+    payload = {"id": document_id}
+    
+    # Use webhook client (standard HTTP status code check)
+    success, status_code, response_text = await webhook_client.call_webhook(
+        url=webhook_url,
+        payload=payload,
+        webhook_name="upload_cv"
+    )
+    
+    # Add webhook status to history
+    if status_code > 0:
+        webhook_status = get_webhook_status(status_code, response_text)
+    else:
+        webhook_status = get_webhook_error_status(response_text or "Unknown error")
+    
+    await add_status_to_history(db_client, document_id, webhook_status)
+    
+    # If successful, update status to "Extracting"
+    if success:
+        await update_document_status(db_client, document_id, STATUS_EXTRACTING)
+        logger.info(f"[WEBHOOK] Updated document {document_id} status to '{STATUS_EXTRACTING}'")
 
 @app.post("/upload-cv", response_model=CVUploadResponse)
 async def upload_cv(
@@ -115,8 +108,13 @@ async def upload_cv(
     campaign: Optional[str] = Form(None),
     notes: Optional[str] = Form(None)
 ):
+    """
+    Upload a new CV document
+    
+    Accepts either a PDF file or metadata (or both)
+    """
     if not file and not any([name, phone, email, campaign, notes]):
-        raise HTTPException(status_code=400, detail="Must provide either PDF file or metadata")
+        raise ValidationError("Must provide either PDF file or metadata")
 
     file_metadata = None
     extracted_text = ""
@@ -180,29 +178,30 @@ async def get_all(deleted: Optional[bool] = Query(None, description="True - רק
 
 @app.get("/cv/{id}")
 async def get_cv_by_id(id: str):
+    """Get a CV document by ID (returns deleted documents too)"""
     doc = await get_document_by_id(db_client, id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise DocumentNotFoundError(id)
     return doc
 
 @app.delete("/cv/{id}")
 async def delete_cv_by_id(id: str):
     """
-    מוחק מסמך על ידי עדכון is_deleted ל-True
+    Soft delete a document by setting is_deleted to True
     """
     deleted = await delete_document_by_id(db_client, id)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise DocumentNotFoundError(id)
     return {"status": "deleted"}
 
 @app.post("/cv/{id}/restore")
 async def restore_cv_by_id(id: str):
     """
-    משחזר מסמך שנמחק על ידי עדכון is_deleted ל-False
+    Restore a deleted document by setting is_deleted to False
     """
     restored = await restore_document_by_id(db_client, id)
     if not restored:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise DocumentNotFoundError(id)
     return {"status": "restored", "id": id}
 
 @app.get("/cv/search")
@@ -212,13 +211,13 @@ async def search_cv(query: str = Query(..., min_length=1)):
 @app.patch("/cv/{id}")
 async def update_cv(id: str, update_data: CVUpdateRequest):
     """
-    מעדכן מסמך - מעדכן רק את השדות שמגיעים ב-body (למעט phone_number שאי אפשר לעדכן)
-    מקבל JSON עם שדות לעדכון
+    Update a document - updates only fields provided in body (except phone_number which cannot be updated)
+    Accepts JSON with fields to update
     """
-    # בדוק שהמסמך קיים
+    # Check document exists
     doc = await get_document_by_id(db_client, id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise DocumentNotFoundError(id)
     
     # המר את ה-Pydantic model ל-dict - רק שדות שנשלחו (exclude_none=True)
     update_dict = update_data.model_dump(exclude_none=True)
@@ -257,12 +256,12 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
 @app.patch("/cv/{id}/status")
 async def update_cv_status(id: str, status_data: StatusUpdateRequest):
     """
-    מעדכן את הסטטוס של מסמך CV לפי ID של סטטוס
+    Update document status by status ID
     
-    - מעדכן את current_status
-    - מוסיף את הסטטוס החדש ל-status_history עם timestamp
+    - Updates current_status
+    - Adds new status to status_history with timestamp
     
-    **סטטוסים זמינים:**
+    **Available statuses:**
     - 1: Submitted
     - 2: Extracting
     - 3: Waiting Bot Interview
@@ -271,21 +270,15 @@ async def update_cv_status(id: str, status_data: StatusUpdateRequest):
     - 6: In Classification
     - 7: Ready For Recruit
     """
-    from app.constants import get_status_by_id, STATUS_ID_MAP
-    
-    # בדוק שהמסמך קיים
+    # Check document exists
     doc = await get_document_by_id(db_client, id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise DocumentNotFoundError(id)
     
-    # קבל את שם הסטטוס לפי ID
+    # Get status name by ID
     status_value = get_status_by_id(status_data.status_id)
     if not status_value:
-        available_statuses = ", ".join([f"{sid}={sname}" for sid, sname in STATUS_ID_MAP.items()])
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid status_id: {status_data.status_id}. Available statuses: {available_statuses}"
-        )
+        raise InvalidStatusError(status_data.status_id, STATUS_ID_MAP)
     
     # עדכן את הסטטוס
     updated = await update_document_status(db_client, id, status_value)
@@ -337,8 +330,8 @@ async def trigger_classification_processor():
         logger.error(f"[MANUAL_TRIGGER] Error in manual classification trigger: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error executing classification processor: {str(e)}")
 
-# אפשרות להרצה ישירה עבור Render, Heroku או לוקאלי:
+# Direct execution option for Render, Heroku or local:
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
+    port = get_port()
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)

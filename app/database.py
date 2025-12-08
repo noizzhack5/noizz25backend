@@ -1,11 +1,20 @@
-import os
+"""
+Database connection module
+Uses configuration from app.core.config
+"""
 from motor.motor_asyncio import AsyncIOMotorClient
+from app.core.config import MONGO_URI, DB_NAME, COLLECTION_NAME
 
-MONGO_URI = "mongodb+srv://noizz25:noizz25!@cluster0.eccgr2j.mongodb.net/?appName=Cluster0&tlsAllowInvalidCertificates=true"
-DB_NAME = "noizz25HR"
-COLLECTION_NAME = "basicHR"
+# Re-export for backward compatibility
+__all__ = ['get_database', 'MONGO_URI', 'DB_NAME', 'COLLECTION_NAME']
 
 
 def get_database():
+    """
+    Get MongoDB database instance
+    
+    Returns:
+        MongoDB database instance
+    """
     client = AsyncIOMotorClient(MONGO_URI)
     return client[DB_NAME]
