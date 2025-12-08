@@ -1,0 +1,8 @@
+{
+  "bot_processor": {
+    "hour": 12,
+    "minute": 0,
+    "timezone": "UTC"
+  }
+}
+

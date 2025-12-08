@@ -8,6 +8,7 @@ from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_full, update_document_status
 from app.services.bot_processor import process_waiting_for_bot_records
+from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
 from app.constants import (
     STATUS_EXTRACTING,
     STATUS_WAITING_BOT_INTERVIEW,
@@ -18,8 +19,6 @@ from app.constants import (
     get_webhook_status,
     get_webhook_error_status
 )
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 import datetime
 import os
 import httpx
@@ -44,44 +43,20 @@ app.add_middleware(
 )
 
 db_client = None
-scheduler = None
 
 WEBHOOK_URL = "https://noizzhack5.app.n8n.cloud/webhook/cc359f5c-9c54-454f-bd71-28f3af0aacaf"
 
-async def scheduled_bot_processor():
-    """פונקציה שרצה על ידי ה-scheduler כל יום ב-10:00"""
-    global db_client
-    logger.info("[SCHEDULER] Starting scheduled bot processor job (triggered by daily scheduler at 10:00 AM)")
-    try:
-        results = await process_waiting_for_bot_records(db_client, trigger_source="scheduled")
-        logger.info(f"[SCHEDULER] Scheduled job completed: {results}")
-    except Exception as e:
-        logger.error(f"[SCHEDULER] Error in scheduled job: {str(e)}", exc_info=True)
-
 @app.on_event("startup")
 async def startup_event():
-    global db_client, scheduler
+    global db_client
     db_client = get_database()
     
     # הגדר את ה-scheduler
-    scheduler = AsyncIOScheduler()
-    # הרץ כל יום ב-10:00 בבוקר (UTC)
-    scheduler.add_job(
-        scheduled_bot_processor,
-        trigger=CronTrigger(hour=10, minute=0),
-        id="daily_bot_processor",
-        name=f"Process {STATUS_WAITING_BOT_INTERVIEW} records daily at 10 AM",
-        replace_existing=True
-    )
-    scheduler.start()
-    logger.info("[STARTUP] Scheduler started - bot processor will run daily at 10:00 AM UTC")
+    setup_scheduler(db_client)
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    global scheduler
-    if scheduler:
-        scheduler.shutdown()
-        logger.info("[SHUTDOWN] Scheduler stopped")
+    shutdown_scheduler()
 
 async def call_webhook(document_id: str):
     """קורא ל-webhook עם ה-ID של המסמך"""
