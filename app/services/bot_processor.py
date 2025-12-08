@@ -2,7 +2,13 @@
 import httpx
 import logging
 from typing import List, Dict
-from app.services.storage import get_documents_by_status, update_webhook_status, update_document_status
+from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
+from app.constants import (
+    STATUS_WAITING_BOT_INTERVIEW,
+    STATUS_BOT_INTERVIEW,
+    get_webhook_status,
+    get_webhook_error_status
+)
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +16,7 @@ BOT_WEBHOOK_URL = "https://noizzhack5.app.n8n.cloud/webhook/7a97c90a-6fe9-49e6-b
 
 async def process_waiting_for_bot_records(db, trigger_source: str = "unknown") -> Dict[str, any]:
     """
-    מחפש רשומות עם סטטוס waiting_for_bot ומבצע קריאה ל-webhook עבור כל רשומה
+    מחפש רשומות עם סטטוס waiting_bot_interview ומבצע קריאה ל-webhook עבור כל רשומה
     
     Args:
         db: מסד הנתונים
@@ -20,11 +26,11 @@ async def process_waiting_for_bot_records(db, trigger_source: str = "unknown") -
         dict עם סטטיסטיקות על העיבוד
     """
     source_label = "SCHEDULED (10:00 AM daily)" if trigger_source == "scheduled" else "MANUAL (user triggered)"
-    logger.info(f"[BOT_PROCESSOR] Starting to process waiting_for_bot records - Trigger: {source_label}")
+    logger.info(f"[BOT_PROCESSOR] Starting to process {STATUS_WAITING_BOT_INTERVIEW} records - Trigger: {source_label}")
     
-    # קבל את כל הרשומות עם סטטוס waiting_for_bot
-    records = await get_documents_by_status(db, "waiting_for_bot")
-    logger.info(f"[BOT_PROCESSOR] Found {len(records)} records with status 'waiting_for_bot'")
+    # קבל את כל הרשומות עם סטטוס waiting_bot_interview
+    records = await get_documents_by_status(db, STATUS_WAITING_BOT_INTERVIEW)
+    logger.info(f"[BOT_PROCESSOR] Found {len(records)} records with status '{STATUS_WAITING_BOT_INTERVIEW}'")
     
     if not records:
         return {
@@ -100,8 +106,8 @@ async def process_waiting_for_bot_records(db, trigger_source: str = "unknown") -
         if detail.get("status") == "success":
             record_id = detail.get("id")
             try:
-                await update_document_status(db, record_id, "in_conversation_with_bot")
-                logger.info(f"[BOT_PROCESSOR] Updated record {record_id} status to 'in_conversation_with_bot'")
+                await update_document_status(db, record_id, STATUS_BOT_INTERVIEW)
+                logger.info(f"[BOT_PROCESSOR] Updated record {record_id} status to '{STATUS_BOT_INTERVIEW}'")
             except Exception as e:
                 logger.error(f"[BOT_PROCESSOR] Failed to update status for record {record_id}: {str(e)}", exc_info=True)
     
@@ -146,8 +152,9 @@ async def call_bot_webhook(db, record_id: str, phone_number: str, latin_name: st
                 f"status_code={status_code}, response_text={status_text}"
             )
             
-            # עדכן את סטטוס ה-webhook
-            await update_webhook_status(db, record_id, status_code, status_text)
+            # הוסף סטטוס webhook ל-history
+            webhook_status = get_webhook_status(status_code, status_text)
+            await add_status_to_history(db, record_id, webhook_status)
             
             # נסה לפרסר את ה-response כ-JSON ולבדוק את השדה success
             try:
@@ -208,16 +215,16 @@ async def call_bot_webhook(db, record_id: str, phone_number: str, latin_name: st
     except httpx.TimeoutException as e:
         error_msg = f"Webhook timeout: {str(e)}"
         logger.error(f"[BOT_WEBHOOK] {error_msg} for record {record_id}")
-        await update_webhook_status(db, record_id, 0, error_msg[:200])
+        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
         return False
     except httpx.RequestError as e:
         error_msg = f"Webhook request error: {str(e)}"
         logger.error(f"[BOT_WEBHOOK] {error_msg} for record {record_id}")
-        await update_webhook_status(db, record_id, 0, error_msg[:200])
+        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
         return False
     except Exception as e:
         error_msg = f"Webhook unexpected error: {str(e)}"
         logger.error(f"[BOT_WEBHOOK] {error_msg} for record {record_id}", exc_info=True)
-        await update_webhook_status(db, record_id, 0, error_msg[:200])
+        await add_status_to_history(db, record_id, get_webhook_error_status(error_msg))
         return False
 

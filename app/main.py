@@ -6,8 +6,17 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, update_webhook_status, update_document_partial, update_document_status
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_partial, update_document_status
 from app.services.bot_processor import process_waiting_for_bot_records
+from app.constants import (
+    STATUS_EXTRACTING,
+    STATUS_WAITING_BOT_INTERVIEW,
+    STATUS_PROCESSING_SUCCESS,
+    STATUS_PROCESSING_FAILED,
+    get_processing_error_status,
+    get_webhook_status,
+    get_webhook_error_status
+)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import datetime
@@ -60,7 +69,7 @@ async def startup_event():
         scheduled_bot_processor,
         trigger=CronTrigger(hour=10, minute=0),
         id="daily_bot_processor",
-        name="Process waiting_for_bot records daily at 10 AM",
+        name=f"Process {STATUS_WAITING_BOT_INTERVIEW} records daily at 10 AM",
         replace_existing=True
     )
     scheduler.start()
@@ -94,26 +103,28 @@ async def call_webhook(document_id: str):
             logger.info(f"[WEBHOOK] Response headers: {dict(response.headers)}")
             logger.info(f"[WEBHOOK] Response text (first 500 chars): {status_text}")
             
-            await update_webhook_status(db_client, document_id, status_code, status_text)
-            logger.info(f"[WEBHOOK] Successfully updated webhook_status for {document_id} with status {status_code}")
+            # הוסף סטטוס webhook ל-history
+            webhook_status = get_webhook_status(status_code, status_text)
+            await add_status_to_history(db_client, document_id, webhook_status)
+            logger.info(f"[WEBHOOK] Added webhook_status to history for {document_id} with status {status_code}")
             
             # אם הקריאה הצליחה (status code 2xx), עדכן סטטוס ל-"extracting"
             if 200 <= status_code < 300:
-                await update_document_status(db_client, document_id, "extracting")
-                logger.info(f"[WEBHOOK] Updated document {document_id} status to 'extracting'")
+                await update_document_status(db_client, document_id, STATUS_EXTRACTING)
+                logger.info(f"[WEBHOOK] Updated document {document_id} status to '{STATUS_EXTRACTING}'")
             
     except httpx.TimeoutException as e:
         error_msg = f"Webhook timeout: {str(e)}"
         logger.error(f"[WEBHOOK] {error_msg}")
-        await update_webhook_status(db_client, document_id, 0, error_msg[:200])
+        await add_status_to_history(db_client, document_id, get_webhook_error_status(error_msg))
     except httpx.RequestError as e:
         error_msg = f"Webhook request error: {str(e)}"
         logger.error(f"[WEBHOOK] {error_msg}")
-        await update_webhook_status(db_client, document_id, 0, error_msg[:200])
+        await add_status_to_history(db_client, document_id, get_webhook_error_status(error_msg))
     except Exception as e:
         error_msg = f"Webhook unexpected error: {str(e)}"
         logger.error(f"[WEBHOOK] {error_msg}", exc_info=True)
-        await update_webhook_status(db_client, document_id, 0, error_msg[:200])
+        await add_status_to_history(db_client, document_id, get_webhook_error_status(error_msg))
 
 @app.post("/upload-cv", response_model=CVUploadResponse)
 async def upload_cv(
@@ -157,15 +168,21 @@ async def upload_cv(
             "job_type": None,
             "match_score": None,
             "class_explain": None
-        },
-        "processing": {
-            "parse_success": parse_success,
-            "error_message": error_message
         }
     }
 
     inserted_id = await insert_cv_document(db_client, document)
     logger.info(f"[UPLOAD] Document saved with ID: {inserted_id}")
+    
+    # הוסף סטטוס processing ל-history אחרי יצירת המסמך
+    if error_message:
+        processing_status = get_processing_error_status(error_message)
+    elif parse_success:
+        processing_status = STATUS_PROCESSING_SUCCESS
+    else:
+        processing_status = STATUS_PROCESSING_FAILED
+    
+    await add_status_to_history(db_client, inserted_id, processing_status)
     
     # קריאה ל-webhook אחרי השמירה (ב-background כדי לא לחסום את התגובה)
     background_tasks.add_task(call_webhook, inserted_id)
@@ -225,9 +242,9 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
     updated = await update_document_partial(db_client, id, update_dict)
     
     if updated:
-        # עדכן סטטוס ל-"waiting_for_bot" אחרי עדכון מוצלח
-        await update_document_status(db_client, id, "waiting_for_bot")
-        logger.info(f"[UPDATE] Document {id} updated successfully, status set to 'waiting_for_bot'")
+        # עדכן סטטוס ל-"waiting_bot_interview" אחרי עדכון מוצלח
+        await update_document_status(db_client, id, STATUS_WAITING_BOT_INTERVIEW)
+        logger.info(f"[UPDATE] Document {id} updated successfully, status set to '{STATUS_WAITING_BOT_INTERVIEW}'")
         return {"status": "updated", "id": id}
     else:
         # אם לא היה מה לעדכן (כל השדות כבר קיימים)

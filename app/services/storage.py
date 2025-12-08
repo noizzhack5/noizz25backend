@@ -1,5 +1,7 @@
 from typing import Any, List, Optional
 from bson import ObjectId
+import datetime
+from app.constants import STATUS_RECEIVED
 
 COLLECTION_NAME = "basicHR"
 
@@ -17,15 +19,35 @@ def normalize_unknown_values(doc: dict) -> dict:
 
 async def insert_cv_document(db, doc: dict) -> str:
     doc["is_deleted"] = False
-    doc["status"] = "received"  # סטטוס ראשוני: נקלט
+    # צור current_status ו-status_history במקום status
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    doc["current_status"] = STATUS_RECEIVED
+    doc["status_history"] = [
+        {
+            "status": STATUS_RECEIVED,
+            "timestamp": timestamp
+        }
+    ]
     res = await db[COLLECTION_NAME].insert_one(doc)
     return str(res.inserted_id)
 
 async def update_document_status(db, id: str, status: str) -> bool:
-    """מעדכן את סטטוס המסמך"""
+    """
+    מעדכן את סטטוס המסמך
+    מעדכן את current_status ומוסיף את הסטטוס החדש ל-status_history
+    """
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    status_entry = {
+        "status": status,
+        "timestamp": timestamp
+    }
+    
     res = await db[COLLECTION_NAME].update_one(
         {"_id": ObjectId(id)},
-        {"$set": {"status": status}}
+        {
+            "$set": {"current_status": status},
+            "$push": {"status_history": status_entry}
+        }
     )
     return res.modified_count > 0
 
@@ -83,14 +105,20 @@ async def delete_document_by_id(db, id: str) -> bool:
     res = await db[COLLECTION_NAME].update_one({"_id": ObjectId(id)}, {"$set": {"is_deleted": True}})
     return res.modified_count > 0
 
-async def update_webhook_status(db, id: str, status_code: int, status_text: str = None) -> bool:
-    """מעדכן את סטטוס ה-webhook במסמך"""
-    update_data = {"webhook_status": {"status_code": status_code}}
-    if status_text:
-        update_data["webhook_status"]["status_text"] = status_text
+async def add_status_to_history(db, id: str, status: str) -> bool:
+    """
+    מוסיף סטטוס ל-status_history (ללא עדכון current_status)
+    משמש להוספת סטטוסים כמו webhook_status, processing וכו'
+    """
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    status_entry = {
+        "status": status,
+        "timestamp": timestamp
+    }
+    
     res = await db[COLLECTION_NAME].update_one(
         {"_id": ObjectId(id)},
-        {"$set": update_data}
+        {"$push": {"status_history": status_entry}}
     )
     return res.modified_count > 0
 
@@ -161,6 +189,12 @@ async def update_document_partial(db, id: str, update_data: dict) -> bool:
         existing_known_data.update(known_data_updates)
         set_updates["known_data"] = existing_known_data
     
+    # ודא שלא מעדכנים status, current_status או status_history ישירות
+    # אלה צריכים להיות מעודכנים רק דרך update_document_status או add_status_to_history
+    set_updates.pop("status", None)
+    set_updates.pop("current_status", None)
+    set_updates.pop("status_history", None)
+    
     res = await db[COLLECTION_NAME].update_one(
         {"_id": ObjectId(id)},
         {"$set": set_updates}
@@ -183,7 +217,7 @@ async def search_documents(db, term: str) -> list:
                 {"known_data.job_type": {"$regex": term, "$options": "i"}},
                 {"known_data.match_score": {"$regex": term, "$options": "i"}},
                 {"known_data.class_explain": {"$regex": term, "$options": "i"}},
-                {"processing.error_message": {"$regex": term, "$options": "i"}},
+                {"current_status": {"$regex": term, "$options": "i"}},
             ]}
         ]
     }
@@ -206,7 +240,7 @@ async def search_documents(db, term: str) -> list:
 async def get_documents_by_status(db, status: str) -> List[dict]:
     """מחזיר את כל המסמכים עם סטטוס מסוים"""
     query = {
-        "status": status,
+        "current_status": status,
         "is_deleted": {"$ne": True}
     }
     docs = []

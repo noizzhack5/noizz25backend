@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 class FileMetadataModel(BaseModel):
     filename: str
@@ -17,16 +17,17 @@ class KnownDataModel(BaseModel):
     match_score: Optional[str] = None
     class_explain: Optional[str] = None
 
-class ProcessingModel(BaseModel):
-    parse_success: bool
-    error_message: Optional[str] = None
+class StatusHistoryItem(BaseModel):
+    status: str
+    timestamp: str
 
 class CVDocumentInDB(BaseModel):
     id: Optional[Any] = Field(alias="_id")
     file_metadata: Optional[FileMetadataModel] = None
     extracted_text: Optional[str] = ""
     known_data: KnownDataModel
-    processing: ProcessingModel
+    current_status: str
+    status_history: List[StatusHistoryItem]
 
 class CVUploadResponse(BaseModel):
     id: str
