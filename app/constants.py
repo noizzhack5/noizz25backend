@@ -6,11 +6,11 @@ from enum import Enum
 # סטטוסים ראשיים
 STATUS_RECEIVED = "received"
 STATUS_EXTRACTING = "extracting"
-STATUS_WAITING_BOT_INTERVIEW = "waiting_bot_interview"
-STATUS_BOT_INTERVIEW = "bot_interview"
-STATUS_READY_FOR_RECRUIT = "ready_for_recruit"
-STATUS_WAITING_CLASSIFICATION = "waiting_classification"
-STATUS_IN_CLASSIFICATION = "in_classification"
+STATUS_WAITING_BOT_INTERVIEW = "waiting bot interview"
+STATUS_BOT_INTERVIEW = "bot interview"
+STATUS_READY_FOR_RECRUIT = "ready for recruit"
+STATUS_WAITING_CLASSIFICATION = "waiting classification"
+STATUS_IN_CLASSIFICATION = "in classification"
 
 class DocumentStatus(str, Enum):
     """Enum לסטטוסים תקפים של מסמכים"""
