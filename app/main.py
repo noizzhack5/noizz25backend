@@ -13,6 +13,8 @@ from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
 from app.constants import (
     STATUS_EXTRACTING,
     STATUS_WAITING_BOT_INTERVIEW,
+    STATUS_IN_CLASSIFICATION,
+    STATUS_READY_FOR_RECRUIT,
     STATUS_PROCESSING_SUCCESS,
     STATUS_PROCESSING_FAILED,
     DocumentStatus,
@@ -220,7 +222,20 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
     updated = await update_document_fields_only(db_client, id, update_dict)
     
     if updated:
-        logger.info(f"[UPDATE] Document {id} updated successfully")
+        # בדוק את הסטטוס הנוכחי ועדכן בהתאם
+        current_status = doc.get("current_status")
+        
+        # אם הסטטוס הנוכחי הוא EXTRACTING - עדכן ל-WAITING_BOT_INTERVIEW
+        if current_status == STATUS_EXTRACTING:
+            await update_document_status(db_client, id, STATUS_WAITING_BOT_INTERVIEW)
+            logger.info(f"[UPDATE] Document {id} updated successfully, status changed from '{STATUS_EXTRACTING}' to '{STATUS_WAITING_BOT_INTERVIEW}'")
+        # אם הסטטוס הנוכחי הוא IN_CLASSIFICATION - עדכן ל-READY_FOR_RECRUIT
+        elif current_status == STATUS_IN_CLASSIFICATION:
+            await update_document_status(db_client, id, STATUS_READY_FOR_RECRUIT)
+            logger.info(f"[UPDATE] Document {id} updated successfully, status changed from '{STATUS_IN_CLASSIFICATION}' to '{STATUS_READY_FOR_RECRUIT}'")
+        else:
+            logger.info(f"[UPDATE] Document {id} updated successfully (current status: {current_status}, no status change needed)")
+        
         return {"status": "updated", "id": id}
     else:
         logger.info(f"[UPDATE] Document {id} - no fields to update")
@@ -235,7 +250,7 @@ async def update_cv_status(id: str, status_data: StatusUpdateRequest):
     - מוסיף את הסטטוס החדש ל-status_history עם timestamp
     
     **סטטוסים זמינים:**
-    - 1: Received
+    - 1: Submitted
     - 2: Extracting
     - 3: Waiting Bot Interview
     - 4: Bot Interview

@@ -4,7 +4,7 @@
 from enum import Enum
 
 # סטטוסים ראשיים
-STATUS_RECEIVED = "Received"
+STATUS_SUBMITTED = "Submitted"
 STATUS_EXTRACTING = "Extracting"
 STATUS_WAITING_BOT_INTERVIEW = "Waiting Bot Interview"
 STATUS_BOT_INTERVIEW = "Bot Interview"
@@ -14,7 +14,7 @@ STATUS_IN_CLASSIFICATION = "In Classification"
 
 # מיפוי ID לסטטוס
 STATUS_ID_MAP = {
-    1: STATUS_RECEIVED,
+    1: STATUS_SUBMITTED,
     2: STATUS_EXTRACTING,
     3: STATUS_WAITING_BOT_INTERVIEW,
     4: STATUS_BOT_INTERVIEW,
@@ -39,7 +39,7 @@ def get_all_statuses() -> list:
 
 class DocumentStatus(str, Enum):
     """Enum לסטטוסים תקפים של מסמכים"""
-    RECEIVED = STATUS_RECEIVED
+    SUBMITTED = STATUS_SUBMITTED
     EXTRACTING = STATUS_EXTRACTING
     WAITING_BOT_INTERVIEW = STATUS_WAITING_BOT_INTERVIEW
     BOT_INTERVIEW = STATUS_BOT_INTERVIEW

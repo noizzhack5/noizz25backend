@@ -1,7 +1,7 @@
 from typing import Any, List, Optional
 from bson import ObjectId
 import datetime
-from app.constants import STATUS_RECEIVED
+from app.constants import STATUS_SUBMITTED
 
 COLLECTION_NAME = "basicHR"
 
@@ -21,10 +21,10 @@ async def insert_cv_document(db, doc: dict) -> str:
     doc["is_deleted"] = False
     # צור current_status ו-status_history במקום status
     timestamp = datetime.datetime.utcnow().isoformat() + "Z"
-    doc["current_status"] = STATUS_RECEIVED
+    doc["current_status"] = STATUS_SUBMITTED
     doc["status_history"] = [
         {
-            "status": STATUS_RECEIVED,
+            "status": STATUS_SUBMITTED,
             "timestamp": timestamp
         }
     ]
