@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, restore_document_by_id, search_documents, add_status_to_history, update_document_full, update_document_status, update_document_fields_only
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, restore_document_by_id, add_status_to_history, update_document_full, update_document_status, update_document_fields_only, search_documents_advanced
 from app.services.bot_processor import process_waiting_for_bot_records
 from app.jobs.classification_processor import process_waiting_classification_records
 from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
@@ -176,6 +176,53 @@ async def get_all(deleted: Optional[bool] = Query(None, description="True - רק
     """
     return await get_all_documents(db_client, deleted)
 
+@app.get("/cv/search")
+async def search_cv(
+    free_text: Optional[str] = Query(None, description="חיפוש חופשי - יחפש את הערך בכל שדה במסמך"),
+    current_status: Optional[str] = Query(None, description="חיפוש לפי סטטוס נוכחי"),
+    job_type: Optional[str] = Query(None, description="חיפוש לפי סוג עבודה"),
+    match_score: Optional[str] = Query(
+        None,
+        description="חיפוש לפי טווח ציון התאמה: 'below 70', '70-79', '80-89', '90-100', 'all match_score'"
+    ),
+    campaign: Optional[str] = Query(None, description="חיפוש לפי קמפיין"),
+    country: Optional[str] = Query(None, description="חיפוש לפי ארץ (nationality)")
+):
+    """
+    חיפוש מתקדם במסמכי CV
+    
+    תומך בחיפוש חופשי (בכל השדות) ובחיפוש לפי שדות ספציפיים:
+    - current_status: סטטוס נוכחי
+    - job_type: סוג עבודה
+    - match_score: טווח ציון התאמה (below 70, 70-79, 80-89, 90-100, all match_score)
+    - campaign: קמפיין
+    - country: ארץ (nationality)
+    
+    ניתן לשלב מספר קריטריונים - החיפוש יחזיר מסמכים התואמים לכל הקריטריונים.
+    """
+    # בדוק שיש לפחות קריטריון חיפוש אחד
+    if not any([free_text, current_status, job_type, match_score, campaign, country]):
+        raise ValidationError("יש לספק לפחות קריטריון חיפוש אחד")
+    
+    # בדוק שהערך של match_score תקף
+    if match_score and match_score not in ["below 70", "70-79", "80-89", "90-100", "all match_score"]:
+        raise ValidationError(
+            f"ערך לא תקף ל-match_score: '{match_score}'. "
+            "הערכים התקפים: 'below 70', '70-79', '80-89', '90-100', 'all match_score'"
+        )
+    
+    results = await search_documents_advanced(
+        db_client,
+        free_text=free_text,
+        current_status=current_status,
+        job_type=job_type,
+        match_score=match_score,
+        campaign=campaign,
+        country=country
+    )
+    
+    return results
+
 @app.get("/cv/{id}")
 async def get_cv_by_id(id: str):
     """Get a CV document by ID (returns deleted documents too)"""
@@ -203,10 +250,6 @@ async def restore_cv_by_id(id: str):
     if not restored:
         raise DocumentNotFoundError(id)
     return {"status": "restored", "id": id}
-
-@app.get("/cv/search")
-async def search_cv(query: str = Query(..., min_length=1)):
-    return await search_documents(db_client, query)
 
 @app.patch("/cv/{id}")
 async def update_cv(id: str, update_data: CVUpdateRequest):

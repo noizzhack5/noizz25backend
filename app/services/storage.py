@@ -341,36 +341,6 @@ async def update_document_partial(db, id: str, update_data: dict) -> bool:
     )
     return res.modified_count > 0
 
-async def search_documents(db, term: str) -> list:
-    q = {
-        "$and": [
-            {"is_deleted": {"$ne": True}},
-            {"$or": [
-                {"extracted_text": {"$regex": term, "$options": "i"}},
-                {"file_metadata.filename": {"$regex": term, "$options": "i"}},
-                {"file_metadata.content_type": {"$regex": term, "$options": "i"}},
-                {"known_data.name": {"$regex": term, "$options": "i"}},
-                {"known_data.phone_number": {"$regex": term, "$options": "i"}},
-                {"known_data.email": {"$regex": term, "$options": "i"}},
-                {"known_data.campaign": {"$regex": term, "$options": "i"}},
-                {"known_data.notes": {"$regex": term, "$options": "i"}},
-                {"known_data.job_type": {"$regex": term, "$options": "i"}},
-                {"known_data.match_score": {"$regex": term, "$options": "i"}},
-                {"known_data.class_explain": {"$regex": term, "$options": "i"}},
-                {"current_status": {"$regex": term, "$options": "i"}},
-            ]}
-        ]
-    }
-    docs = []
-    cursor = db[COLLECTION_NAME].find(q)
-    async for doc in cursor:
-        doc["id"] = str(doc["_id"])
-        doc.pop("_id", None)
-        # Use normalize_document utility for consistent normalization
-        doc = normalize_document(doc)
-        docs.append(doc)
-    return docs
-
 async def get_documents_by_status(db, status: str) -> List[dict]:
     """מחזיר את כל המסמכים עם סטטוס מסוים"""
     query = {
@@ -384,4 +354,127 @@ async def get_documents_by_status(db, status: str) -> List[dict]:
         # Use normalize_document utility for consistent normalization
         doc = normalize_document(doc)
         docs.append(doc)
+    return docs
+
+async def search_documents_advanced(
+    db,
+    free_text: Optional[str] = None,
+    current_status: Optional[str] = None,
+    job_type: Optional[str] = None,
+    match_score: Optional[str] = None,
+    campaign: Optional[str] = None,
+    country: Optional[str] = None
+) -> List[dict]:
+    """
+    חיפוש מתקדם במסמכים
+    
+    Args:
+        free_text: חיפוש חופשי - יחפש את הערך בכל שדה במסמך
+        current_status: חיפוש לפי סטטוס נוכחי
+        job_type: חיפוש לפי סוג עבודה
+        match_score: חיפוש לפי טווח ציון התאמה (below 70, 70-79, 80-89, 90-100, all match_score)
+        campaign: חיפוש לפי קמפיין
+        country: חיפוש לפי ארץ (nationality)
+    
+    Returns:
+        רשימת מסמכים התואמים לקריטריוני החיפוש
+    """
+    # התחל עם query בסיסי - רק מסמכים לא מחוקים
+    query_conditions = [{"is_deleted": {"$ne": True}}]
+    
+    # חיפוש חופשי - יחפש בכל השדות
+    if free_text:
+        free_text_conditions = {
+            "$or": [
+                {"extracted_text": {"$regex": free_text, "$options": "i"}},
+                {"file_metadata.filename": {"$regex": free_text, "$options": "i"}},
+                {"known_data.name": {"$regex": free_text, "$options": "i"}},
+                {"known_data.phone_number": {"$regex": free_text, "$options": "i"}},
+                {"known_data.email": {"$regex": free_text, "$options": "i"}},
+                {"known_data.campaign": {"$regex": free_text, "$options": "i"}},
+                {"known_data.notes": {"$regex": free_text, "$options": "i"}},
+                {"known_data.job_type": {"$regex": free_text, "$options": "i"}},
+                {"known_data.match_score": {"$regex": free_text, "$options": "i"}},
+                {"known_data.class_explain": {"$regex": free_text, "$options": "i"}},
+                {"known_data.latin_name": {"$regex": free_text, "$options": "i"}},
+                {"known_data.hebrew_name": {"$regex": free_text, "$options": "i"}},
+                {"known_data.nationality": {"$regex": free_text, "$options": "i"}},
+                {"current_status": {"$regex": free_text, "$options": "i"}},
+            ]
+        }
+        query_conditions.append(free_text_conditions)
+    
+    # חיפוש לפי שדות ספציפיים
+    if current_status:
+        query_conditions.append({"current_status": current_status})
+    
+    if job_type:
+        query_conditions.append({"known_data.job_type": {"$regex": job_type, "$options": "i"}})
+    
+    if match_score:
+        # טיפול מיוחד ב-match_score - טווחים
+        match_score_conditions = []
+        
+        if match_score == "below 70":
+            # כל הערכים מתחת ל-70: 0-69
+            # נשתמש ב-regex patterns לכל המספרים מ-0 עד 69
+            match_score_conditions = [
+                {"known_data.match_score": {"$regex": r"^[0-6][0-9]$", "$options": "i"}},  # 00-69
+                {"known_data.match_score": {"$regex": r"^[0-9]$", "$options": "i"}},  # 0-9
+            ]
+        elif match_score == "70-79":
+            match_score_conditions = [
+                {"known_data.match_score": {"$regex": r"^7[0-9]$", "$options": "i"}},
+            ]
+        elif match_score == "80-89":
+            match_score_conditions = [
+                {"known_data.match_score": {"$regex": r"^8[0-9]$", "$options": "i"}},
+            ]
+        elif match_score == "90-100":
+            match_score_conditions = [
+                {"known_data.match_score": {"$regex": r"^(9[0-9]|100)$", "$options": "i"}},
+            ]
+        elif match_score == "all match_score":
+            # כל המסמכים שיש להם match_score (לא None)
+            match_score_conditions = [
+                {"known_data.match_score": {"$exists": True, "$ne": None}},
+            ]
+        
+        if match_score_conditions:
+            query_conditions.append({"$or": match_score_conditions})
+    
+    if campaign:
+        query_conditions.append({"known_data.campaign": {"$regex": campaign, "$options": "i"}})
+    
+    if country:
+        query_conditions.append({"known_data.nationality": {"$regex": country, "$options": "i"}})
+    
+    # בנה את ה-query הסופי
+    query = {"$and": query_conditions} if len(query_conditions) > 1 else query_conditions[0]
+    
+    docs = []
+    cursor = db[COLLECTION_NAME].find(query)
+    async for doc in cursor:
+        # טיפול מיוחד ב-match_score עבור "below 70" - סינון נוסף למקרים שלא נתפסו ב-regex
+        if match_score == "below 70":
+            match_score_value = doc.get("known_data", {}).get("match_score")
+            if match_score_value is not None:
+                score_str = str(match_score_value).strip()
+                try:
+                    # נסה להמיר למספר לבדיקה מדויקת
+                    score_num = float(score_str)
+                    if score_num >= 70:
+                        continue  # דלג על מסמך זה
+                except (ValueError, TypeError):
+                    # אם לא ניתן להמיר, נבדוק אם זה מספר בעל 3 ספרות או יותר (100+)
+                    if len(score_str) >= 3:
+                        continue  # כנראה 100 או יותר
+                    # אחרת, נכלול אותו (יכול להיות משהו כמו "65.5" או ערך לא מספרי)
+        
+        doc["id"] = str(doc["_id"])
+        doc.pop("_id", None)
+        # Use normalize_document utility for consistent normalization
+        doc = normalize_document(doc)
+        docs.append(doc)
+    
     return docs
