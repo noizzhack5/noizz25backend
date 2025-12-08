@@ -222,24 +222,44 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
 @app.patch("/cv/{id}/status")
 async def update_cv_status(id: str, status_data: StatusUpdateRequest):
     """
-    מעדכן את הסטטוס של מסמך CV
+    מעדכן את הסטטוס של מסמך CV לפי ID של סטטוס
     
     - מעדכן את current_status
     - מוסיף את הסטטוס החדש ל-status_history עם timestamp
+    
+    **סטטוסים זמינים:**
+    - 1: Received
+    - 2: Extracting
+    - 3: Waiting Bot Interview
+    - 4: Bot Interview
+    - 5: Waiting Classification
+    - 6: In Classification
+    - 7: Ready For Recruit
     """
+    from app.constants import get_status_by_id, STATUS_ID_MAP
+    
     # בדוק שהמסמך קיים
     doc = await get_document_by_id(db_client, id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # עדכן את הסטטוס (status_data.status הוא כבר DocumentStatus enum, נמיר ל-string)
-    status_value = status_data.status.value if isinstance(status_data.status, DocumentStatus) else str(status_data.status)
+    # קבל את שם הסטטוס לפי ID
+    status_value = get_status_by_id(status_data.status_id)
+    if not status_value:
+        available_statuses = ", ".join([f"{sid}={sname}" for sid, sname in STATUS_ID_MAP.items()])
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid status_id: {status_data.status_id}. Available statuses: {available_statuses}"
+        )
+    
+    # עדכן את הסטטוס
     updated = await update_document_status(db_client, id, status_value)
     if updated:
-        logger.info(f"[STATUS_UPDATE] Document {id} status updated to '{status_value}'")
+        logger.info(f"[STATUS_UPDATE] Document {id} status updated to '{status_value}' (ID: {status_data.status_id})")
         return {
             "status": "updated",
             "id": id,
+            "status_id": status_data.status_id,
             "current_status": status_value
         }
     else:

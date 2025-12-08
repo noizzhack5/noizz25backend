@@ -35,8 +35,22 @@ class CVUploadResponse(BaseModel):
     status: str
 
 class StatusUpdateRequest(BaseModel):
-    """Model לעדכון סטטוס מסמך"""
-    status: DocumentStatus = Field(..., description="הסטטוס החדש לעדכון - חייב להיות אחד מהסטטוסים התקפים")
+    """Model לעדכון סטטוס מסמך לפי ID"""
+    status_id: int = Field(
+        ..., 
+        description="ID של הסטטוס החדש לעדכון. ערכים תקפים: 1=Received, 2=Extracting, 3=Waiting Bot Interview, 4=Bot Interview, 5=Waiting Classification, 6=In Classification, 7=Ready For Recruit",
+        ge=1, 
+        le=7,
+        example=1
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status_id": 1
+            },
+            "description": "סטטוסים זמינים: 1=Received, 2=Extracting, 3=Waiting Bot Interview, 4=Bot Interview, 5=Waiting Classification, 6=In Classification, 7=Ready For Recruit"
+        }
 
 class CVUpdateRequest(BaseModel):
     """Model לעדכון מסמך CV - כל השדות אופציונליים (למעט phone_number שאי אפשר לעדכן)"""

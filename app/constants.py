@@ -12,6 +12,31 @@ STATUS_READY_FOR_RECRUIT = "Ready For Recruit"
 STATUS_WAITING_CLASSIFICATION = "Waiting Classification"
 STATUS_IN_CLASSIFICATION = "In Classification"
 
+# מיפוי ID לסטטוס
+STATUS_ID_MAP = {
+    1: STATUS_RECEIVED,
+    2: STATUS_EXTRACTING,
+    3: STATUS_WAITING_BOT_INTERVIEW,
+    4: STATUS_BOT_INTERVIEW,
+    5: STATUS_WAITING_CLASSIFICATION,
+    6: STATUS_IN_CLASSIFICATION,
+    7: STATUS_READY_FOR_RECRUIT,
+}
+
+# מיפוי סטטוס ל-ID (reverse mapping)
+STATUS_TO_ID_MAP = {v: k for k, v in STATUS_ID_MAP.items()}
+
+def get_status_by_id(status_id: int) -> str:
+    """מחזיר את שם הסטטוס לפי ID"""
+    return STATUS_ID_MAP.get(status_id)
+
+def get_all_statuses() -> list:
+    """מחזיר רשימה של כל הסטטוסים הזמינים עם ID שלהם"""
+    return [
+        {"id": status_id, "name": status_name}
+        for status_id, status_name in STATUS_ID_MAP.items()
+    ]
+
 class DocumentStatus(str, Enum):
     """Enum לסטטוסים תקפים של מסמכים"""
     RECEIVED = STATUS_RECEIVED
