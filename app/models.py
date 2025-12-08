@@ -39,11 +39,9 @@ class StatusUpdateRequest(BaseModel):
     status: DocumentStatus = Field(..., description="הסטטוס החדש לעדכון - חייב להיות אחד מהסטטוסים התקפים")
 
 class CVUpdateRequest(BaseModel):
-    """Model לעדכון מסמך CV - כל השדות אופציונליים"""
+    """Model לעדכון מסמך CV - כל השדות אופציונליים (למעט phone_number שאי אפשר לעדכן)"""
     latin_name: Optional[str] = Field(default=None, description="שם לטיני")
     hebrew_name: Optional[str] = Field(default=None, description="שם עברי")
-    phone_number: Optional[str] = Field(default=None, description="מספר טלפון")
-    phone: Optional[str] = Field(default=None, description="מספר טלפון (יומר ל-phone_number)")
     email: Optional[str] = Field(default=None, description="כתובת אימייל")
     campaign: Optional[str] = Field(default=None, description="קמפיין")
     age: Optional[str] = Field(default=None, description="גיל")
@@ -64,7 +62,6 @@ class CVUpdateRequest(BaseModel):
             "example": {
                 "latin_name": "John Doe",
                 "hebrew_name": "יוחנן דו",
-                "phone_number": "+1234567890",
                 "email": "example@email.com",
                 "campaign": "Summer 2024",
                 "age": "30",

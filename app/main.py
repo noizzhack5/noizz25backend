@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_partial, update_document_status
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_full, update_document_status
 from app.services.bot_processor import process_waiting_for_bot_records
 from app.constants import (
     STATUS_EXTRACTING,
@@ -221,26 +221,19 @@ async def search_cv(query: str = Query(..., min_length=1)):
 @app.patch("/cv/{id}")
 async def update_cv(id: str, update_data: CVUpdateRequest):
     """
-    מעדכן מסמך - רק שדות שלא קיימים או ריקים
-    מקבל JSON עם שדות נוספים על המועמד
+    מעדכן מסמך - מעדכן את כל השדות תמיד (למעט phone_number שאי אפשר לעדכן)
+    מקבל JSON עם שדות לעדכון
     """
     # בדוק שהמסמך קיים
     doc = await get_document_by_id(db_client, id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # המר את ה-Pydantic model ל-dict (רק שדות שלא None)
-    update_dict = update_data.model_dump(exclude_none=True)
-    
-    # הוסף את השדות job_type, match_score, class_explain תמיד (גם אם None)
-    # שדות אלה נשמרים תמיד תחת known_data, גם אם הם NULL
-    always_update_fields = ["job_type", "match_score", "class_explain"]
-    for field in always_update_fields:
-        if hasattr(update_data, field):
-            update_dict[field] = getattr(update_data, field)
+    # המר את ה-Pydantic model ל-dict (כולל שדות עם None)
+    update_dict = update_data.model_dump(exclude_none=False)
     
     # עדכן את המסמך
-    updated = await update_document_partial(db_client, id, update_dict)
+    updated = await update_document_full(db_client, id, update_dict)
     
     if updated:
         # עדכן סטטוס ל-"waiting_bot_interview" אחרי עדכון מוצלח
@@ -248,9 +241,8 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
         logger.info(f"[UPDATE] Document {id} updated successfully, status set to '{STATUS_WAITING_BOT_INTERVIEW}'")
         return {"status": "updated", "id": id}
     else:
-        # אם לא היה מה לעדכן (כל השדות כבר קיימים)
-        logger.info(f"[UPDATE] Document {id} - no new fields to update")
-        return {"status": "no_changes", "id": id, "message": "All fields already exist or are empty"}
+        logger.info(f"[UPDATE] Document {id} - no fields to update")
+        return {"status": "no_changes", "id": id, "message": "No fields to update"}
 
 @app.patch("/cv/{id}/status")
 async def update_cv_status(id: str, status_data: StatusUpdateRequest):
