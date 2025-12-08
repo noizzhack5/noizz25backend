@@ -4,13 +4,13 @@
 from enum import Enum
 
 # סטטוסים ראשיים
-STATUS_RECEIVED = "received"
-STATUS_EXTRACTING = "extracting"
-STATUS_WAITING_BOT_INTERVIEW = "waiting bot interview"
-STATUS_BOT_INTERVIEW = "bot interview"
-STATUS_READY_FOR_RECRUIT = "ready for recruit"
-STATUS_WAITING_CLASSIFICATION = "waiting classification"
-STATUS_IN_CLASSIFICATION = "in classification"
+STATUS_RECEIVED = "Received"
+STATUS_EXTRACTING = "Extracting"
+STATUS_WAITING_BOT_INTERVIEW = "Waiting Bot Interview"
+STATUS_BOT_INTERVIEW = "Bot Interview"
+STATUS_READY_FOR_RECRUIT = "Ready For Recruit"
+STATUS_WAITING_CLASSIFICATION = "Waiting Classification"
+STATUS_IN_CLASSIFICATION = "In Classification"
 
 class DocumentStatus(str, Enum):
     """Enum לסטטוסים תקפים של מסמכים"""
