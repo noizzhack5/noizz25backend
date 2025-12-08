@@ -6,8 +6,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
-from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_full, update_document_status
+from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, search_documents, add_status_to_history, update_document_full, update_document_status, update_document_fields_only
 from app.services.bot_processor import process_waiting_for_bot_records
+from app.jobs.classification_processor import process_waiting_classification_records
 from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
 from app.constants import (
     STATUS_EXTRACTING,
@@ -196,7 +197,7 @@ async def search_cv(query: str = Query(..., min_length=1)):
 @app.patch("/cv/{id}")
 async def update_cv(id: str, update_data: CVUpdateRequest):
     """
-    מעדכן מסמך - מעדכן את כל השדות תמיד (למעט phone_number שאי אפשר לעדכן)
+    מעדכן מסמך - מעדכן רק את השדות שמגיעים ב-body (למעט phone_number שאי אפשר לעדכן)
     מקבל JSON עם שדות לעדכון
     """
     # בדוק שהמסמך קיים
@@ -204,16 +205,22 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # המר את ה-Pydantic model ל-dict (כולל שדות עם None)
-    update_dict = update_data.model_dump(exclude_none=False)
+    # המר את ה-Pydantic model ל-dict - רק שדות שנשלחו (exclude_none=True)
+    update_dict = update_data.model_dump(exclude_none=True)
     
-    # עדכן את המסמך
-    updated = await update_document_full(db_client, id, update_dict)
+    # הסר phone_number - לא ניתן לעדכן אותו
+    update_dict.pop("phone_number", None)
+    
+    # אם אין שדות לעדכון, החזר הודעה
+    if not update_dict:
+        logger.info(f"[UPDATE] Document {id} - no fields to update")
+        return {"status": "no_changes", "id": id, "message": "No fields to update"}
+    
+    # עדכן את המסמך - רק את השדות שנשלחו
+    updated = await update_document_fields_only(db_client, id, update_dict)
     
     if updated:
-        # עדכן סטטוס ל-"waiting_bot_interview" אחרי עדכון מוצלח
-        await update_document_status(db_client, id, STATUS_WAITING_BOT_INTERVIEW)
-        logger.info(f"[UPDATE] Document {id} updated successfully, status set to '{STATUS_WAITING_BOT_INTERVIEW}'")
+        logger.info(f"[UPDATE] Document {id} updated successfully")
         return {"status": "updated", "id": id}
     else:
         logger.info(f"[UPDATE] Document {id} - no fields to update")
@@ -282,6 +289,25 @@ async def trigger_bot_processor():
     except Exception as e:
         logger.error(f"[MANUAL_TRIGGER] Error in manual trigger: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing records: {str(e)}")
+
+@app.post("/process-waiting-classification")
+async def trigger_classification_processor():
+    """
+    מפעיל ידנית את השירות לעיבוד רשומות עם סטטוס waiting_classification
+    שירות זה רץ אוטומטית כל X דקות, אבל ניתן להפעיל אותו ידנית דרך endpoint זה
+    """
+    logger.info("[MANUAL_TRIGGER] Manual trigger of classification processor requested (triggered by user via API endpoint)")
+    try:
+        results = await process_waiting_classification_records(db_client)
+        logger.info(f"[MANUAL_TRIGGER] Manual classification trigger completed: {results}")
+        return {
+            "status": "completed",
+            "message": "Classification processor executed successfully",
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"[MANUAL_TRIGGER] Error in manual classification trigger: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error executing classification processor: {str(e)}")
 
 # אפשרות להרצה ישירה עבור Render, Heroku או לוקאלי:
 if __name__ == "__main__":

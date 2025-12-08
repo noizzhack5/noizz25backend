@@ -1,7 +1,11 @@
 {
   "bot_processor": {
-    "hour": 12,
+    "hour": 13,
     "minute": 0,
+    "timezone": "UTC"
+  },
+  "classification_processor": {
+    "interval_minutes": 5,
     "timezone": "UTC"
   }
 }

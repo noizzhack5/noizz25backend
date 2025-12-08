@@ -192,6 +192,79 @@ async def update_document_full(db, id: str, update_data: dict) -> bool:
     )
     return res.modified_count > 0
 
+async def update_document_fields_only(db, id: str, update_data: dict) -> bool:
+    """מעדכן מסמך - מעדכן רק את השדות שמגיעים ב-update_data"""
+    # קבל את המסמך הנוכחי
+    doc = await db[COLLECTION_NAME].find_one({"_id": ObjectId(id), "is_deleted": {"$ne": True}})
+    if not doc:
+        return False
+    
+    # המר "unknown" ל-None בכל הערכים ב-update_data לפני העיבוד
+    update_data = update_data.copy()  # עותק כדי לא לשנות את המקורי
+    for key, value in update_data.items():
+        if isinstance(value, str) and value.lower() == "unknown":
+            update_data[key] = None
+    
+    # הסר שדות שצריכים להיות מעודכנים רק דרך update_document_status
+    # כדי למנוע עדכון ישיר של status, current_status או status_history
+    update_data.pop("status", None)
+    update_data.pop("current_status", None)
+    update_data.pop("status_history", None)
+    
+    # הסר את phone_number - לא ניתן לעדכן 
+    update_data.pop("phone_number", None)
+    
+    # אם אין שדות לעדכון, החזר True
+    if not update_data:
+        return True
+    
+    # בנה את ה-update
+    set_updates = {}
+    
+    # שדות ב-known_data
+    known_data_updates = {}
+    if "known_data" not in doc:
+        doc["known_data"] = {}
+    
+    # כל השדות הנוספים יישמרו תחת known_data
+    all_fields = [
+        "latin_name", "hebrew_name", "email", "campaign",
+        "age", "nationality", "can_travel_europe", 
+        "can_visit_israel", "lives_in_europe", "native_israeli",
+        "english_level", "remembers_job_application", "skills_summary",
+        "job_type", "match_score", "class_explain"
+    ]
+    
+    # עדכן רק את השדות שמגיעים ב-update_data
+    for field in all_fields:
+        if field in update_data:
+            # המר "unknown" ל-None אם זה string
+            value = update_data[field]
+            if isinstance(value, str) and value.lower() == "unknown":
+                value = None
+            known_data_updates[field] = value
+    
+    # אם אין מה לעדכן, החזר True
+    if not known_data_updates:
+        return True
+    
+    # עדכן את המסמך
+    # אם יש known_data_updates, צריך לעשות merge עם known_data הקיים
+    existing_known_data = doc.get("known_data", {})
+    existing_known_data.update(known_data_updates)
+    set_updates["known_data"] = existing_known_data
+    
+    # ודא שלא מעדכנים status, current_status או status_history ישירות
+    set_updates.pop("status", None)
+    set_updates.pop("current_status", None)
+    set_updates.pop("status_history", None)
+    
+    res = await db[COLLECTION_NAME].update_one(
+        {"_id": ObjectId(id)},
+        {"$set": set_updates}
+    )
+    return res.modified_count > 0
+
 async def update_document_partial(db, id: str, update_data: dict) -> bool:
     """מעדכן מסמך - רק שדות שלא קיימים או ריקים"""
     # קבל את המסמך הנוכחי
