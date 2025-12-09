@@ -7,7 +7,7 @@ from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, Status
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, restore_document_by_id, add_status_to_history, update_document_full, update_document_status, update_document_fields_only, search_documents_advanced
-from app.services.bot_processor import process_waiting_for_bot_records
+from app.services.bot_processor import process_waiting_for_bot_records, process_single_bot_record
 from app.jobs.classification_processor import process_waiting_classification_records
 from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
 from app.services.config_loader import get_webhook_url
@@ -23,6 +23,7 @@ from app.core.constants import (
     get_webhook_status,
     get_webhook_error_status,
     get_status_by_id,
+    get_all_statuses,
     STATUS_ID_MAP
 )
 from app.core.config import (
@@ -175,6 +176,15 @@ async def get_all(deleted: Optional[bool] = Query(None, description="True - רק
     - deleted=True: רק מסמכים מחוקים
     """
     return await get_all_documents(db_client, deleted)
+
+@app.get("/statuses")
+async def get_statuses():
+    """
+    מחזיר את כל הסטטוסים הזמינים במערכת
+    
+    מחזיר רשימה של כל הסטטוסים עם המזהה והשם שלהם.
+    """
+    return get_all_statuses()
 
 @app.get("/cv/search")
 async def search_cv(
@@ -353,6 +363,45 @@ async def trigger_bot_processor():
     except Exception as e:
         logger.error(f"[MANUAL_TRIGGER] Error in manual trigger: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing records: {str(e)}")
+
+@app.post("/process-bot/{id}")
+async def trigger_single_bot_processor(id: str):
+    """
+    מפעיל עיבוד עבור רשומה ספציפית לפי ID
+    
+    - בודק שהרשומה קיימת
+    - בודק שהרשומה בסטטוס "Ready For Bot Interview"
+    - אם כן, מפעיל את הקריאה ל-webhook
+    - אם הקריאה הצליחה, מעדכן את הסטטוס ל-"Bot Interview"
+    """
+    logger.info(f"[MANUAL_TRIGGER] Manual trigger of single bot processor for record {id}")
+    try:
+        result = await process_single_bot_record(db_client, id)
+        logger.info(f"[MANUAL_TRIGGER] Single bot processor completed for record {id}: {result}")
+        
+        # אם הרשומה לא נמצאה או לא בסטטוס הנכון, החזר שגיאה מתאימה
+        if result.get("status") == "not_found":
+            raise DocumentNotFoundError(id)
+        elif result.get("status") == "invalid_status":
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("message", f"Record {id} is not in the correct status")
+            )
+        elif not result.get("success"):
+            # אם יש שגיאה אחרת, החזר אותה
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("message", f"Error processing record {id}")
+            )
+        
+        return result
+    except DocumentNotFoundError:
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[MANUAL_TRIGGER] Error in single bot processor for record {id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error processing record {id}: {str(e)}")
 
 @app.post("/process-waiting-classification")
 async def trigger_classification_processor():

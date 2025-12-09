@@ -4,7 +4,7 @@ Uses webhook client utility for making HTTP requests
 """
 import logging
 from typing import Dict
-from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
+from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status, get_document_by_id
 from app.services.config_loader import get_webhook_url
 from app.core.constants import (
     STATUS_READY_FOR_BOT_INTERVIEW,
@@ -156,4 +156,77 @@ async def call_bot_webhook(db, record_id: str, phone_number: str, latin_name: st
     await add_status_to_history(db, record_id, webhook_status)
     
     return success
+
+async def process_single_bot_record(db, record_id: str) -> Dict[str, any]:
+    """
+    מטפל ברשומה ספציפית לפי ID - בודק שהרשומה בסטטוס Ready For Bot Interview ומפעיל את הקריאה ל-webhook
+    
+    Args:
+        db: מסד הנתונים
+        record_id: מזהה הרשומה
+    
+    Returns:
+        dict עם תוצאות העיבוד
+    """
+    logger.info(f"[BOT_PROCESSOR] Processing single record {record_id}")
+    
+    # בדוק שהרשומה קיימת
+    record = await get_document_by_id(db, record_id)
+    if not record:
+        logger.warning(f"[BOT_PROCESSOR] Record {record_id} not found")
+        return {
+            "success": False,
+            "status": "not_found",
+            "message": f"Record {record_id} not found"
+        }
+    
+    # בדוק שהרשומה בסטטוס Ready For Bot Interview
+    current_status = record.get("current_status")
+    if current_status != STATUS_READY_FOR_BOT_INTERVIEW:
+        logger.warning(
+            f"[BOT_PROCESSOR] Record {record_id} is not in '{STATUS_READY_FOR_BOT_INTERVIEW}' status. "
+            f"Current status: '{current_status}'"
+        )
+        return {
+            "success": False,
+            "status": "invalid_status",
+            "message": f"Record is not in '{STATUS_READY_FOR_BOT_INTERVIEW}' status. Current status: '{current_status}'",
+            "current_status": current_status
+        }
+    
+    # קבל את הנתונים הנדרשים
+    known_data = record.get("known_data", {})
+    phone_number = known_data.get("phone_number")
+    latin_name = known_data.get("latin_name")
+    
+    # בצע קריאה ל-webhook
+    try:
+        success = await call_bot_webhook(db, record_id, phone_number, latin_name)
+        if success:
+            # עדכן את הסטטוס ל-Bot Interview
+            await update_document_status(db, record_id, STATUS_BOT_INTERVIEW)
+            logger.info(f"[BOT_PROCESSOR] Successfully processed record {record_id} and updated status to '{STATUS_BOT_INTERVIEW}'")
+            return {
+                "success": True,
+                "status": "success",
+                "message": f"Record {record_id} processed successfully",
+                "id": record_id
+            }
+        else:
+            logger.warning(f"[BOT_PROCESSOR] Failed to process record {record_id} - webhook call failed")
+            return {
+                "success": False,
+                "status": "webhook_failed",
+                "message": f"Webhook call failed for record {record_id}",
+                "id": record_id
+            }
+    except Exception as e:
+        logger.error(f"[BOT_PROCESSOR] Error processing record {record_id}: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "status": "error",
+            "message": f"Error processing record {record_id}: {str(e)}",
+            "id": record_id,
+            "error": str(e)
+        }
 
