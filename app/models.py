@@ -89,3 +89,14 @@ class CVUpdateRequest(BaseModel):
                 "skills_summary": "Experienced professional with expertise in various fields. Strong background in technical and interpersonal skills."
             }
         }
+
+class RecruitNoteRequest(BaseModel):
+    """Model לשמירת הערת recruit"""
+    recruit_note: str = Field(..., description="הערת recruit לשמירה")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "recruit_note": "מועמד מתאים לתפקיד, יש לזמן לראיון"
+            }
+        }

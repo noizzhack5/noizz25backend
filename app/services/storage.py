@@ -156,7 +156,7 @@ async def update_document_full(db, id: str, update_data: dict) -> bool:
         "age", "nationality", "can_travel_europe", 
         "can_visit_israel", "lives_in_europe", "native_israeli",
         "english_level", "remembers_job_application", "skills_summary",
-        "job_type", "match_score", "class_explain"
+        "job_type", "match_score", "class_explain", "recruit_note"
     ]
     
     # עדכן את כל השדות תמיד (למעט phone_number שכבר הוסר)
@@ -229,7 +229,7 @@ async def update_document_fields_only(db, id: str, update_data: dict) -> bool:
         "age", "nationality", "can_travel_europe", 
         "can_visit_israel", "lives_in_europe", "native_israeli",
         "english_level", "remembers_job_application", "skills_summary",
-        "job_type", "match_score", "class_explain"
+        "job_type", "match_score", "class_explain", "recruit_note"
     ]
     
     # עדכן רק את השדות שמגיעים ב-update_data

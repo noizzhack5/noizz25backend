@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
-from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest
+from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest, RecruitNoteRequest
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, restore_document_by_id, add_status_to_history, update_document_full, update_document_status, update_document_fields_only, search_documents_advanced
@@ -345,6 +345,32 @@ async def update_cv_status(id: str, status_data: StatusUpdateRequest):
         }
     else:
         raise HTTPException(status_code=500, detail="Failed to update document status")
+
+@app.patch("/cv/{id}/recruit-note")
+async def update_recruit_note(id: str, note_data: RecruitNoteRequest):
+    """
+    שמירת הערת recruit עבור מסמך
+    
+    שומר את ההערה תחת known_data.recruit_note
+    """
+    # בדוק שהמסמך קיים
+    doc = await get_document_by_id(db_client, id)
+    if not doc:
+        raise DocumentNotFoundError(id)
+    
+    # עדכן את ההערה
+    update_dict = {"recruit_note": note_data.recruit_note}
+    updated = await update_document_fields_only(db_client, id, update_dict)
+    
+    if updated:
+        logger.info(f"[RECRUIT_NOTE] Document {id} - recruit note updated successfully")
+        return {
+            "status": "updated",
+            "id": id,
+            "recruit_note": note_data.recruit_note
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to update recruit note")
 
 @app.post("/process-waiting-for-bot")
 async def trigger_bot_processor():
