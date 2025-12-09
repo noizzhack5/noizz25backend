@@ -147,10 +147,10 @@
 ### סטטוסים ראשיים
 - `STATUS_SUBMITTED = "Submitted"`
 - `STATUS_EXTRACTING = "Extracting"`
-- `STATUS_WAITING_BOT_INTERVIEW = "Waiting Bot Interview"`
+- `STATUS_READY_FOR_BOT_INTERVIEW = "Ready For Bot Interview"`
 - `STATUS_BOT_INTERVIEW = "Bot Interview"`
 - `STATUS_READY_FOR_RECRUIT = "Ready For Recruit"`
-- `STATUS_WAITING_CLASSIFICATION = "Waiting Classification"`
+- `STATUS_READY_FOR_CLASSIFICATION = "Ready For Classification"`
 - `STATUS_IN_CLASSIFICATION = "In Classification"`
 
 ### מיפוי ID לסטטוס
@@ -318,7 +318,7 @@
 
 ## `app/services/bot_processor.py`
 
-**תפקיד**: עיבוד רשומות עם סטטוס "Waiting Bot Interview"
+**תפקיד**: עיבוד רשומות עם סטטוס "Ready For Bot Interview"
 
 **תלויות**:
 - `app.services.storage`
@@ -332,7 +332,7 @@
 - **תפקיד**: מחזיר URL של bot webhook מהקונפיגורציה
 
 ### `process_waiting_for_bot_records(db, trigger_source: str = "unknown") -> Dict[str, any]`
-- **תפקיד**: עיבוד כל הרשומות עם סטטוס "Waiting Bot Interview"
+- **תפקיד**: עיבוד כל הרשומות עם סטטוס "Ready For Bot Interview"
 - **פרמטרים**:
   - `db`: מסד הנתונים
   - `trigger_source`: "scheduled" או "manual"
@@ -356,7 +356,7 @@
 
 ## `app/jobs/classification_processor.py`
 
-**תפקיד**: עיבוד רשומות עם סטטוס "Waiting Classification"
+**תפקיד**: עיבוד רשומות עם סטטוס "Ready For Classification"
 
 **תלויות**:
 - `app.services.storage`
@@ -370,7 +370,7 @@
 - **תפקיד**: מחזיר URL של classification webhook מהקונפיגורציה
 
 ### `process_waiting_classification_records(db) -> Dict[str, any]`
-- **תפקיד**: עיבוד כל הרשומות עם סטטוס "Waiting Classification"
+- **תפקיד**: עיבוד כל הרשומות עם סטטוס "Ready For Classification"
 - **תהליך**:
   1. מוצא כל המסמכים עם הסטטוס
   2. לכל מסמך: קורא ל-webhook

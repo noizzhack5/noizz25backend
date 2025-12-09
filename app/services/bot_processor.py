@@ -7,7 +7,7 @@ from typing import Dict
 from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
 from app.services.config_loader import get_webhook_url
 from app.core.constants import (
-    STATUS_WAITING_BOT_INTERVIEW,
+    STATUS_READY_FOR_BOT_INTERVIEW,
     STATUS_BOT_INTERVIEW,
     get_webhook_status,
     get_webhook_error_status
@@ -32,11 +32,11 @@ async def process_waiting_for_bot_records(db, trigger_source: str = "unknown") -
         dict עם סטטיסטיקות על העיבוד
     """
     source_label = "SCHEDULED (10:00 AM daily)" if trigger_source == "scheduled" else "MANUAL (user triggered)"
-    logger.info(f"[BOT_PROCESSOR] Starting to process {STATUS_WAITING_BOT_INTERVIEW} records - Trigger: {source_label}")
+    logger.info(f"[BOT_PROCESSOR] Starting to process {STATUS_READY_FOR_BOT_INTERVIEW} records - Trigger: {source_label}")
     
     # קבל את כל הרשומות עם סטטוס waiting_bot_interview
-    records = await get_documents_by_status(db, STATUS_WAITING_BOT_INTERVIEW)
-    logger.info(f"[BOT_PROCESSOR] Found {len(records)} records with status '{STATUS_WAITING_BOT_INTERVIEW}'")
+    records = await get_documents_by_status(db, STATUS_READY_FOR_BOT_INTERVIEW)
+    logger.info(f"[BOT_PROCESSOR] Found {len(records)} records with status '{STATUS_READY_FOR_BOT_INTERVIEW}'")
     
     if not records:
         return {

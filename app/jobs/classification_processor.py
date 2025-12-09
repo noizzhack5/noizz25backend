@@ -7,7 +7,7 @@ from typing import Dict
 from app.services.storage import get_documents_by_status, add_status_to_history, update_document_status
 from app.services.config_loader import get_webhook_url
 from app.core.constants import (
-    STATUS_WAITING_CLASSIFICATION,
+    STATUS_READY_FOR_CLASSIFICATION,
     STATUS_IN_CLASSIFICATION,
     get_webhook_status,
     get_webhook_error_status
@@ -30,11 +30,11 @@ async def process_waiting_classification_records(db) -> Dict[str, any]:
     Returns:
         dict עם סטטיסטיקות על העיבוד
     """
-    logger.info(f"[CLASSIFICATION_PROCESSOR] Starting to process {STATUS_WAITING_CLASSIFICATION} records")
+    logger.info(f"[CLASSIFICATION_PROCESSOR] Starting to process {STATUS_READY_FOR_CLASSIFICATION} records")
     
     # קבל את כל הרשומות עם סטטוס waiting_classification
-    records = await get_documents_by_status(db, STATUS_WAITING_CLASSIFICATION)
-    logger.info(f"[CLASSIFICATION_PROCESSOR] Found {len(records)} records with status '{STATUS_WAITING_CLASSIFICATION}'")
+    records = await get_documents_by_status(db, STATUS_READY_FOR_CLASSIFICATION)
+    logger.info(f"[CLASSIFICATION_PROCESSOR] Found {len(records)} records with status '{STATUS_READY_FOR_CLASSIFICATION}'")
     
     if not records:
         return {

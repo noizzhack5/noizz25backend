@@ -10,7 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from app.services.bot_processor import process_waiting_for_bot_records
 from app.jobs.classification_processor import process_waiting_classification_records
-from app.constants import STATUS_WAITING_BOT_INTERVIEW, STATUS_WAITING_CLASSIFICATION
+from app.constants import STATUS_READY_FOR_BOT_INTERVIEW, STATUS_READY_FOR_CLASSIFICATION
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ def setup_scheduler(db_client):
         scheduled_bot_processor,
         trigger=CronTrigger(hour=hour, minute=minute),
         id="daily_bot_processor",
-        name=f"Process {STATUS_WAITING_BOT_INTERVIEW} records daily at {hour:02d}:{minute:02d}",
+        name=f"Process {STATUS_READY_FOR_BOT_INTERVIEW} records daily at {hour:02d}:{minute:02d}",
         replace_existing=True
     )
     
@@ -140,7 +140,7 @@ def setup_scheduler(db_client):
         scheduled_classification_processor,
         trigger=IntervalTrigger(seconds=interval_seconds),
         id="classification_processor",
-        name=f"Process {STATUS_WAITING_CLASSIFICATION} records every {interval_seconds} seconds",
+        name=f"Process {STATUS_READY_FOR_CLASSIFICATION} records every {interval_seconds} seconds",
         replace_existing=True
     )
     

@@ -66,7 +66,7 @@
    └─ Triggers: scheduled_bot_processor()
 
 2. scheduled_bot_processor() → process_waiting_for_bot_records()
-   ├─ Get all documents with status "Waiting Bot Interview"
+   ├─ Get all documents with status "Ready For Bot Interview"
    └─ For each document:
 
 3. For each document:
@@ -104,12 +104,12 @@
 
 ### דיאגרמת מצבים
 ```
-[Waiting Bot Interview] → [Bot Interview] (after webhook success)
+[Ready For Bot Interview] → [Bot Interview] (after webhook success)
 ```
 
 ### טיפול בשגיאות
-- **Webhook Timeout**: מתועד ב-history, המסמך נשאר ב-"Waiting Bot Interview"
-- **Webhook Returns success=false**: המסמך נשאר ב-"Waiting Bot Interview"
+- **Webhook Timeout**: מתועד ב-history, המסמך נשאר ב-"Ready For Bot Interview"
+- **Webhook Returns success=false**: המסמך נשאר ב-"Ready For Bot Interview"
 - **Database Error**: מתועד ב-logs, המסמך לא מעודכן
 
 ---
@@ -123,7 +123,7 @@
    └─ Triggers: scheduled_classification_processor()
 
 2. scheduled_classification_processor() → process_waiting_classification_records()
-   ├─ Get all documents with status "Waiting Classification"
+   ├─ Get all documents with status "Ready For Classification"
    └─ For each document:
 
 3. For each document:
@@ -148,7 +148,7 @@
 
 ### דיאגרמת מצבים
 ```
-[Waiting Classification] → [In Classification] (after webhook success)
+[Ready For Classification] → [In Classification] (after webhook success)
 ```
 
 ---
@@ -175,7 +175,7 @@
 
 4. FastAPI → Check current_status:
    ├─ If "Extracting":
-   │   └─ update_document_status() → "Waiting Bot Interview"
+   │   └─ update_document_status() → "Ready For Bot Interview"
    │
    └─ If "In Classification":
        └─ update_document_status() → "Ready For Recruit"
@@ -186,7 +186,7 @@
 
 ### דיאגרמת מצבים
 ```
-[Extracting] → [Waiting Bot Interview] (after update)
+[Extracting] → [Ready For Bot Interview] (after update)
 [In Classification] → [Ready For Recruit] (after update)
 ```
 
@@ -218,7 +218,7 @@
        "status": "updated",
        "id": "...",
        "status_id": 3,
-       "current_status": "Waiting Bot Interview"
+       "current_status": "Ready For Bot Interview"
      }
 ```
 
@@ -293,11 +293,11 @@
    ↓ (webhook success)
 [2. Extracting]
    ↓ (user updates document)
-[3. Waiting Bot Interview]
+[3. Ready For Bot Interview]
    ↓ (scheduler/bot webhook success)
 [4. Bot Interview]
    ↓ (manual status update)
-[5. Waiting Classification]
+[5. Ready For Classification]
    ↓ (scheduler/classification webhook success)
 [6. In Classification]
    ↓ (user updates document)
@@ -371,7 +371,7 @@ API returns appropriate HTTP status
 ### תרחיש 3: Webhook מחזיר success=false
 - **קלט**: Webhook מחזיר `{"success": false}` או `{"success": "false"}`
 - **תהליך**: המערכת מזהה את הערך ומחזירה `False`
-- **תוצאה**: המסמך לא מעודכן, נשאר ב-"Waiting Bot Interview"
+- **תוצאה**: המסמך לא מעודכן, נשאר ב-"Ready For Bot Interview"
 
 ### תרחיש 4: עדכון מסמך לא קיים
 - **קלט**: `PATCH /cv/{invalid_id}`

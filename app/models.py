@@ -38,7 +38,7 @@ class StatusUpdateRequest(BaseModel):
     """Model לעדכון סטטוס מסמך לפי ID"""
     status_id: int = Field(
         ..., 
-        description="ID של הסטטוס החדש לעדכון. ערכים תקפים: 1=Submitted, 2=Extracting, 3=Waiting Bot Interview, 4=Bot Interview, 5=Waiting Classification, 6=In Classification, 7=Ready For Recruit",
+        description="ID של הסטטוס החדש לעדכון. ערכים תקפים: 1=Submitted, 2=Extracting, 3=Ready For Bot Interview, 4=Bot Interview, 5=Ready For Classification, 6=In Classification, 7=Ready For Recruit",
         ge=1, 
         le=7,
         example=1
@@ -49,7 +49,7 @@ class StatusUpdateRequest(BaseModel):
             "example": {
                 "status_id": 1
             },
-            "description": "סטטוסים זמינים: 1=Submitted, 2=Extracting, 3=Waiting Bot Interview, 4=Bot Interview, 5=Waiting Classification, 6=In Classification, 7=Ready For Recruit"
+            "description": "סטטוסים זמינים: 1=Submitted, 2=Extracting, 3=Ready For Bot Interview, 4=Bot Interview, 5=Ready For Classification, 6=In Classification, 7=Ready For Recruit"
         }
 
 class CVUpdateRequest(BaseModel):

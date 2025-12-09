@@ -82,12 +82,12 @@ noizz25backend/
 - טיפול בשגיאות חילוץ
 
 ### 7. Bot Processor (`app/services/bot_processor.py`)
-- עיבוד רשומות עם סטטוס "Waiting Bot Interview"
+- עיבוד רשומות עם סטטוס "Ready For Bot Interview"
 - קריאה ל-webhook חיצוני
 - עדכון סטטוס לאחר הצלחה
 
 ### 8. Classification Processor (`app/jobs/classification_processor.py`)
-- עיבוד רשומות עם סטטוס "Waiting Classification"
+- עיבוד רשומות עם סטטוס "Ready For Classification"
 - קריאה ל-webhook חיצוני
 - עדכון סטטוס לאחר הצלחה
 
@@ -124,7 +124,7 @@ POST /upload-cv
 ### תזרים - עיבוד בוט
 ```
 Scheduler (daily) / Manual trigger
-  → Get documents with "Waiting Bot Interview"
+  → Get documents with "Ready For Bot Interview"
   → For each document:
       → Call bot webhook
       → Check response.success field
@@ -135,7 +135,7 @@ Scheduler (daily) / Manual trigger
 ### תזרים - עיבוד Classification
 ```
 Scheduler (every X minutes) / Manual trigger
-  → Get documents with "Waiting Classification"
+  → Get documents with "Ready For Classification"
   → For each document:
       → Call classification webhook
       → If HTTP 2xx: Update status to "In Classification"

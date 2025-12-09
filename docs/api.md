@@ -205,7 +205,7 @@ curl -X GET "http://localhost:8000/cv/69368322b70117f5f55dcc03"
 - לא ניתן לעדכן `status`, `current_status`, `status_history` ישירות
 
 **לוגיקה מותנית**:
-- אם `current_status == "Extracting"` → משנה ל-`"Waiting Bot Interview"`
+- אם `current_status == "Extracting"` → משנה ל-`"Ready For Bot Interview"`
 - אם `current_status == "In Classification"` → משנה ל-`"Ready For Recruit"`
 
 **Response** (200 OK):
@@ -247,9 +247,9 @@ curl -X PATCH "http://localhost:8000/cv/69368322b70117f5f55dcc03" \
 **סטטוסים זמינים**:
 - `1`: Submitted
 - `2`: Extracting
-- `3`: Waiting Bot Interview
+- `3`: Ready For Bot Interview
 - `4`: Bot Interview
-- `5`: Waiting Classification
+- `5`: Ready For Classification
 - `6`: In Classification
 - `7`: Ready For Recruit
 
@@ -262,7 +262,7 @@ curl -X PATCH "http://localhost:8000/cv/69368322b70117f5f55dcc03" \
   "status": "updated",
   "id": "69368322b70117f5f55dcc03",
   "status_id": 3,
-  "current_status": "Waiting Bot Interview"
+  "current_status": "Ready For Bot Interview"
 }
 ```
 
@@ -386,7 +386,7 @@ curl -X POST "http://localhost:8000/cv/69368322b70117f5f55dcc03/restore"
 ### 9. הפעלה ידנית - Bot Processor
 **`POST /process-waiting-for-bot`**
 
-מפעיל ידנית את עיבוד רשומות עם סטטוס "Waiting Bot Interview".
+מפעיל ידנית את עיבוד רשומות עם סטטוס "Ready For Bot Interview".
 
 **Response** (200 OK):
 ```json
@@ -409,7 +409,7 @@ curl -X POST "http://localhost:8000/cv/69368322b70117f5f55dcc03/restore"
 - `500 Internal Server Error`: "Error processing records: ..."
 
 **תהליך**:
-- מוצא כל המסמכים עם סטטוס "Waiting Bot Interview"
+- מוצא כל המסמכים עם סטטוס "Ready For Bot Interview"
 - קורא ל-webhook לכל מסמך
 - מעדכן סטטוס למסמכים שהצליחו
 
@@ -423,7 +423,7 @@ curl -X POST "http://localhost:8000/process-waiting-for-bot"
 ### 10. הפעלה ידנית - Classification Processor
 **`POST /process-waiting-classification`**
 
-מפעיל ידנית את עיבוד רשומות עם סטטוס "Waiting Classification".
+מפעיל ידנית את עיבוד רשומות עם סטטוס "Ready For Classification".
 
 **Response** (200 OK):
 ```json
@@ -446,7 +446,7 @@ curl -X POST "http://localhost:8000/process-waiting-for-bot"
 - `500 Internal Server Error`: "Error executing classification processor: ..."
 
 **תהליך**:
-- מוצא כל המסמכים עם סטטוס "Waiting Classification"
+- מוצא כל המסמכים עם סטטוס "Ready For Classification"
 - קורא ל-webhook לכל מסמך
 - מעדכן סטטוס למסמכים שהצליחו
 

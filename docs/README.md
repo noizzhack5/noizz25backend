@@ -41,8 +41,8 @@
 ## מחזור חיי מסמך
 
 ```
-Submitted → Extracting → Waiting Bot Interview → Bot Interview 
-→ Waiting Classification → In Classification → Ready For Recruit
+Submitted → Extracting → Ready For Bot Interview → Bot Interview 
+→ Ready For Classification → In Classification → Ready For Recruit
 ```
 
 ## נקודות כניסה עיקריות

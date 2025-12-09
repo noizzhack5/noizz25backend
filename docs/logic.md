@@ -24,12 +24,12 @@
 
 **תהליך**:
 - המסמך ממתין לעיבוד חיצוני
-- כאשר משתמש מעדכן את המסמך (`PATCH /cv/{id}`) והסטטוס הוא `Extracting`, הסטטוס משתנה אוטומטית ל-`Waiting Bot Interview`
+- כאשר משתמש מעדכן את המסמך (`PATCH /cv/{id}`) והסטטוס הוא `Extracting`, הסטטוס משתנה אוטומטית ל-`Ready For Bot Interview`
 
 **קובץ**: `app/main.py` - `update_cv()`
 
-### 3. שלב המתנה לבוט (Waiting Bot Interview)
-**סטטוס**: `Waiting Bot Interview`
+### 3. שלב המתנה לבוט (Ready For Bot Interview)
+**סטטוס**: `Ready For Bot Interview`
 
 **תהליך**:
 - Scheduler רץ כל יום בשעה מוגדרת (ברירת מחדל: 10:00 UTC)
@@ -51,8 +51,8 @@
 - אין עיבוד אוטומטי בשלב זה
 - ניתן לעדכן ידנית דרך `PATCH /cv/{id}/status`
 
-### 5. שלב המתנה לקלסיפיקציה (Waiting Classification)
-**סטטוס**: `Waiting Classification`
+### 5. שלב המתנה לקלסיפיקציה (Ready For Classification)
+**סטטוס**: `Ready For Classification`
 
 **תהליך**:
 - Scheduler רץ כל X דקות (ברירת מחדל: 5 דקות)
@@ -130,7 +130,7 @@
 1. מעדכן רק שדות שנשלחו ב-body (לא מאפס שדות שלא נשלחו)
 2. לא ניתן לעדכן `phone_number`
 3. לא ניתן לעדכן `status`, `current_status`, `status_history` ישירות
-4. אם הסטטוס הנוכחי הוא `Extracting` → משנה ל-`Waiting Bot Interview`
+4. אם הסטטוס הנוכחי הוא `Extracting` → משנה ל-`Ready For Bot Interview`
 5. אם הסטטוס הנוכחי הוא `In Classification` → משנה ל-`Ready For Recruit`
 
 **פונקציה**: `update_document_fields_only()` ב-`app/services/storage.py`
@@ -197,13 +197,13 @@
 **תגובה**: אם HTTP 2xx → עדכון סטטוס ל-`Extracting`
 
 #### 2. Bot Processor Webhook
-**מתי**: עיבוד רשומות עם סטטוס "Waiting Bot Interview"
+**מתי**: עיבוד רשומות עם סטטוס "Ready For Bot Interview"
 **URL**: `{base_url}/{bot_processor_path}`
 **Payload**: `{"id": "...", "phone_number": "...", "latin_name": "..."}`
 **תגובה**: בודק שדה `success` (boolean או string) → אם `true` → עדכון ל-`Bot Interview`
 
 #### 3. Classification Webhook
-**מתי**: עיבוד רשומות עם סטטוס "Waiting Classification"
+**מתי**: עיבוד רשומות עם סטטוס "Ready For Classification"
 **URL**: `{base_url}/{classification_processor_path}`
 **Payload**: `{"id": "document_id"}`
 **תגובה**: אם HTTP 2xx → עדכון ל-`In Classification`

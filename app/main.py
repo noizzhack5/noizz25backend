@@ -13,7 +13,7 @@ from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
 from app.services.config_loader import get_webhook_url
 from app.core.constants import (
     STATUS_EXTRACTING,
-    STATUS_WAITING_BOT_INTERVIEW,
+    STATUS_READY_FOR_BOT_INTERVIEW,
     STATUS_IN_CLASSIFICATION,
     STATUS_READY_FOR_RECRUIT,
     STATUS_PROCESSING_SUCCESS,
@@ -280,10 +280,10 @@ async def update_cv(id: str, update_data: CVUpdateRequest):
         # בדוק את הסטטוס הנוכחי ועדכן בהתאם
         current_status = doc.get("current_status")
         
-        # אם הסטטוס הנוכחי הוא EXTRACTING - עדכן ל-WAITING_BOT_INTERVIEW
+        # אם הסטטוס הנוכחי הוא EXTRACTING - עדכן ל-READY_FOR_BOT_INTERVIEW
         if current_status == STATUS_EXTRACTING:
-            await update_document_status(db_client, id, STATUS_WAITING_BOT_INTERVIEW)
-            logger.info(f"[UPDATE] Document {id} updated successfully, status changed from '{STATUS_EXTRACTING}' to '{STATUS_WAITING_BOT_INTERVIEW}'")
+            await update_document_status(db_client, id, STATUS_READY_FOR_BOT_INTERVIEW)
+            logger.info(f"[UPDATE] Document {id} updated successfully, status changed from '{STATUS_EXTRACTING}' to '{STATUS_READY_FOR_BOT_INTERVIEW}'")
         # אם הסטטוס הנוכחי הוא IN_CLASSIFICATION - עדכן ל-READY_FOR_RECRUIT
         elif current_status == STATUS_IN_CLASSIFICATION:
             await update_document_status(db_client, id, STATUS_READY_FOR_RECRUIT)
@@ -307,9 +307,9 @@ async def update_cv_status(id: str, status_data: StatusUpdateRequest):
     **Available statuses:**
     - 1: Submitted
     - 2: Extracting
-    - 3: Waiting Bot Interview
+    - 3: Ready For Bot Interview
     - 4: Bot Interview
-    - 5: Waiting Classification
+    - 5: Ready For Classification
     - 6: In Classification
     - 7: Ready For Recruit
     """
