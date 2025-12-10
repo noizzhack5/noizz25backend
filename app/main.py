@@ -8,6 +8,7 @@ from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, restore_document_by_id, add_status_to_history, update_document_full, update_document_status, update_document_fields_only, search_documents_advanced
 from app.services.bot_processor import process_waiting_for_bot_records, process_single_bot_record
+from app.services.chat_service import get_chat_history_by_id
 from app.jobs.classification_processor import process_waiting_classification_records
 from app.jobs.scheduler import setup_scheduler, shutdown_scheduler
 from app.services.config_loader import get_webhook_url
@@ -447,6 +448,37 @@ async def trigger_classification_processor():
     except Exception as e:
         logger.error(f"[MANUAL_TRIGGER] Error in manual classification trigger: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error executing classification processor: {str(e)}")
+
+@app.get("/chat-history/{id}")
+async def get_chat_history(id: str):
+    """
+    מחזיר את היסטוריית הצ'אט של משתמש לפי ID
+    
+    Args:
+        id: מזהה המשתמש (יכול להיות ObjectId, phone_number, או string ID)
+    
+    Returns:
+        Dictionary עם היסטוריית הצ'אט של המשתמש
+    """
+    logger.info(f"[CHAT_HISTORY] Requesting chat history for user ID: {id}")
+    try:
+        chat_history = await get_chat_history_by_id(db_client, id)
+        
+        if not chat_history:
+            logger.warning(f"[CHAT_HISTORY] Chat history not found for user ID: {id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chat history not found for user ID: {id}"
+            )
+        
+        logger.info(f"[CHAT_HISTORY] Successfully retrieved chat history for user ID: {id}")
+        return chat_history
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[CHAT_HISTORY] Error retrieving chat history for user ID {id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error retrieving chat history: {str(e)}")
 
 # Direct execution option for Render, Heroku or local:
 if __name__ == "__main__":
