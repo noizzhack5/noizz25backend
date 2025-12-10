@@ -26,6 +26,7 @@ def load_scheduler_config():
     config_path = Path(__file__).parent / "scheduler_config.json"
     default_config = {
         "bot_processor": {
+            "enabled": True,
             "hour": 10,
             "minute": 0,
             "timezone": "UTC"
@@ -49,6 +50,7 @@ def load_scheduler_config():
         # טען הגדרות bot_processor
         bot_config = config.get("bot_processor", {})
         result["bot_processor"] = {
+            "enabled": bot_config.get("enabled", default_config["bot_processor"]["enabled"]),
             "hour": bot_config.get("hour", default_config["bot_processor"]["hour"]),
             "minute": bot_config.get("minute", default_config["bot_processor"]["minute"]),
             "timezone": bot_config.get("timezone", default_config["bot_processor"]["timezone"])
@@ -121,17 +123,21 @@ def setup_scheduler(db_client):
     
     scheduler = AsyncIOScheduler(timezone=timezone)
     
-    # הוסף job ל-bot_processor (יומי)
+    # הוסף job ל-bot_processor (יומי) - רק אם enabled בקונפיגורציה
     bot_config = config.get("bot_processor", {})
-    hour = bot_config.get("hour", 10)
-    minute = bot_config.get("minute", 0)
-    scheduler.add_job(
-        scheduled_bot_processor,
-        trigger=CronTrigger(hour=hour, minute=minute),
-        id="daily_bot_processor",
-        name=f"Process {STATUS_READY_FOR_BOT_INTERVIEW} records daily at {hour:02d}:{minute:02d}",
-        replace_existing=True
-    )
+    if bot_config.get("enabled", True):
+        hour = bot_config.get("hour", 10)
+        minute = bot_config.get("minute", 0)
+        scheduler.add_job(
+            scheduled_bot_processor,
+            trigger=CronTrigger(hour=hour, minute=minute),
+            id="daily_bot_processor",
+            name=f"Process {STATUS_READY_FOR_BOT_INTERVIEW} records daily at {hour:02d}:{minute:02d}",
+            replace_existing=True
+        )
+        logger.info(f"[STARTUP]   - Bot processor: daily at {hour:02d}:{minute:02d} {timezone}")
+    else:
+        logger.info(f"[STARTUP]   - Bot processor: DISABLED (enabled=false in config)")
     
     # הוסף job ל-classification_processor (כל X שניות)
     classification_config = config.get("classification_processor", {})
@@ -146,7 +152,6 @@ def setup_scheduler(db_client):
     
     scheduler.start()
     logger.info(f"[STARTUP] Scheduler started:")
-    logger.info(f"[STARTUP]   - Bot processor: daily at {hour:02d}:{minute:02d} {timezone}")
     logger.info(f"[STARTUP]   - Classification processor: every {interval_seconds} seconds")
     return scheduler
 

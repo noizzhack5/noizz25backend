@@ -1,5 +1,6 @@
 {
   "bot_processor": {
+    "enabled": false,
     "hour": 10,
     "minute": 0,
     "timezone": "UTC"
