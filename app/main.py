@@ -3,9 +3,10 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
-from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest, RecruitNoteRequest
+from app.models import CVDocumentInDB, CVUploadResponse, CVUpdateRequest, StatusUpdateRequest, RecruitNoteRequest, BulkUploadResponse
 from app.database import get_database
 from app.services.pdf_parser import extract_text_from_pdf
+from app.services.excel_processor import parse_excel_file, parse_csv_file
 from app.services.storage import insert_cv_document, get_all_documents, get_document_by_id, delete_document_by_id, restore_document_by_id, add_status_to_history, update_document_full, update_document_status, update_document_fields_only, search_documents_advanced
 from app.services.bot_processor import process_waiting_for_bot_records, process_single_bot_record
 from app.services.chat_service import get_chat_history_by_id
@@ -168,6 +169,119 @@ async def upload_cv(
     logger.info(f"[UPLOAD] Webhook task added to background for document_id: {inserted_id}")
     
     return {"id": str(inserted_id), "status": "stored"}
+
+@app.post("/upload-cv-excel", response_model=BulkUploadResponse)
+async def upload_cv_excel(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(..., description="קובץ אקסל או CSV עם רשומות מועמדים")
+):
+    """
+    העלאת קובץ אקסל או CSV עם ריבוי רשומות מועמדים
+    
+    הקובץ צריך להכיל שורת headers עם העמודות:
+    - name (חובה)
+    - phone_number או phone (חובה)
+    - email (אופציונלי)
+    - campaign (אופציונלי)
+    - notes (אופציונלי)
+    
+    כל שורה בקובץ תיצור מסמך CV חדש במערכת.
+    
+    תומך בפורמטים: .xlsx, .xls, .csv
+    """
+    # בדוק שהקובץ הוא אקסל או CSV
+    if not file.filename:
+        raise ValidationError("יש לספק קובץ")
+    
+    file_extension = file.filename.lower().split('.')[-1] if '.' in file.filename else ""
+    if file_extension not in ['xlsx', 'xls', 'csv']:
+        raise ValidationError("הקובץ חייב להיות בפורמט Excel (.xlsx או .xls) או CSV (.csv)")
+    
+    try:
+        # קרא את הקובץ
+        file_bytes = await file.read()
+        
+        # פרסר את הקובץ לפי סוג הקובץ
+        if file_extension == 'csv':
+            records = parse_csv_file(file_bytes)
+        else:
+            records = parse_excel_file(file_bytes)
+        
+        if not records:
+            raise ValidationError("לא נמצאו רשומות בקובץ")
+        
+        # עבד כל רשומה ויצור מסמך
+        successful = 0
+        failed = 0
+        document_ids = []
+        errors = []
+        
+        for idx, record in enumerate(records, start=1):
+            try:
+                # בדוק שיש לפחות name או phone_number
+                if not record.get("name") and not record.get("phone_number"):
+                    errors.append({
+                        "row": idx + 1,  # +1 כי idx מתחיל מ-1, ויש גם שורת headers
+                        "error": "רשומה ללא name או phone_number",
+                        "record": record
+                    })
+                    failed += 1
+                    continue
+                
+                # צור מסמך עבור הרשומה
+                document = {
+                    "file_metadata": None,
+                    "extracted_text": "",
+                    "known_data": {
+                        "name": record.get("name"),
+                        "phone_number": record.get("phone_number"),
+                        "email": record.get("email"),
+                        "campaign": record.get("campaign"),
+                        "notes": record.get("notes"),
+                        "job_type": None,
+                        "match_score": None,
+                        "class_explain": None
+                    }
+                }
+                
+                inserted_id = await insert_cv_document(db_client, document)
+                document_ids.append(str(inserted_id))
+                
+                # הוסף סטטוס processing ל-history
+                await add_status_to_history(db_client, inserted_id, STATUS_PROCESSING_FAILED)
+                
+                # קריאה ל-webhook אחרי השמירה (ב-background)
+                background_tasks.add_task(call_webhook, inserted_id)
+                
+                successful += 1
+                logger.info(f"[BULK_UPLOAD] Record {idx} saved with ID: {inserted_id}")
+                
+            except Exception as e:
+                failed += 1
+                error_msg = str(e)
+                errors.append({
+                    "row": idx + 1,
+                    "error": error_msg,
+                    "record": record
+                })
+                logger.error(f"[BULK_UPLOAD] Error processing record {idx}: {error_msg}", exc_info=True)
+        
+        logger.info(f"[BULK_UPLOAD] Completed: {successful} successful, {failed} failed out of {len(records)} total")
+        
+        return {
+            "total_records": len(records),
+            "successful": successful,
+            "failed": failed,
+            "document_ids": document_ids,
+            "errors": errors if errors else []
+        }
+        
+    except ValueError as e:
+        # שגיאת פרסור
+        raise ValidationError(str(e))
+    except Exception as e:
+        logger.error(f"[BULK_UPLOAD] Error processing file: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"שגיאה בעיבוד הקובץ: {str(e)}")
 
 @app.get("/cv")
 async def get_all(deleted: Optional[bool] = Query(None, description="True - רק מחוקים, False/None - רק לא מחוקים")):

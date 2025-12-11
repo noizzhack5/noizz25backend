@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 from app.constants import DocumentStatus
 
 class FileMetadataModel(BaseModel):
@@ -100,3 +100,11 @@ class RecruitNoteRequest(BaseModel):
                 "recruit_note": "מועמד מתאים לתפקיד, יש לזמן לראיון"
             }
         }
+
+class BulkUploadResponse(BaseModel):
+    """Model לתגובת bulk upload"""
+    total_records: int = Field(..., description="מספר הרשומות בקובץ")
+    successful: int = Field(..., description="מספר הרשומות שנוצרו בהצלחה")
+    failed: int = Field(..., description="מספר הרשומות שנכשלו")
+    document_ids: List[str] = Field(..., description="רשימת IDs של המסמכים שנוצרו")
+    errors: List[Dict[str, Any]] = Field(default_factory=list, description="רשימת שגיאות (אם יש)")
